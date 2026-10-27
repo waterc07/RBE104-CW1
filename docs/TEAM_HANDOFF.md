@@ -6,12 +6,15 @@
 
 | 内容 | 文件 / 符号 |
 | --- | --- |
-| 地图、包裹位置 | `src/game.c` 的 `initialMap` |
-| 机器人和叉车起点 | `src/game.c` 的 `start`、`forkStarts` |
+| 地图、包裹位置 | `src/level.c` 的 `generateLevel`；约定见 [LEVELS.md](LEVELS.md) |
+| 各地图包裹数量 | `src/level.c` 的 `levelPackageCount`；生成与结构校验共用，求解段数按 `totalPackages` 计算 |
+| 机器人和叉车起点 | `currentLevel.start`、`currentLevel.forkStarts` |
 | 拾取、配送、得分 | `src/game.c` 的 `handlePackage` |
 | 叉车移动 | `src/game.c` 的 `moveForklifts` |
 | 回合顺序、扣命与重生 | `src/game.c` 的 `takeTurn` |
+| 随机回血掉落与拾取 | `src/game.c` 的 `restartGame`、`spawnHealth`、`takeTurn`；快照和求解去重同步保留道具状态 |
 | 配色、图标、字体和 HUD | `src/scene.c` |
+| 固定格子尺寸、画布与窗口大小 | `src/scene.h` 的 `TILE_SIZE`、`src/scene.c` 的 `updateSceneSize`、`src/window.c` 的 `resizeScene` |
 | 共享暂停、重开、胜负判断 | `src/game.c` 的 `processCommand`、`getGameStatus` |
 | SDL 按键映射、窗口与缩放 | `src/window.c` |
 | 终端输入、显示及命令映射 | `src/terminal.c` |
@@ -24,7 +27,9 @@
 - 终端版是课程提交所需入口，SDL 版继续开发，两端保持相同的游戏功能。
 - 已实现：共享游戏核心处理状态、规则、回合、暂停、重开和胜负判断，终端与 SDL 分别处理输入和显示。
 - 新功能和修复必须覆盖两端；按键、输入方式和画面可不同，规则、得分及胜负结果应一致。暂停、重开等游戏操作也需提供对应入口。
-- 修改共享规则后验证两个前端；相同 seed、叉车数和游戏操作在同一 C 库下应得到一致的状态结果。记录已验证的行为和待补差异，不将维护目标写成已实现功能。
+- 修改共享规则后验证两个前端；相同版本、关卡号、叉车数和游戏操作应得到一致的状态结果。记录已验证的行为和待补差异，不将维护目标写成已实现功能。
+
+关卡生成与求解分别位于 `src/level.c` 和 `src/solver.c`。`initialise()` 返回成功/失败；检查成功后才进入游戏，R 使用 `restartGame()` 恢复保存的关卡。
 
 ## 修改后的检查
 

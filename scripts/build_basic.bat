@@ -14,11 +14,11 @@ if "%~1"=="" goto basic
 echo Usage: scripts\build_basic.bat [basic^|gui]
 exit /b 1
 :basic
-gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -Isrc src\game.c src\terminal.c -o build\windows\terminal.exe
+gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -Isrc src\level.c src\solver.c src\game.c src\terminal.c -o build\windows\terminal.exe
 if errorlevel 1 goto failed
-gcc -std=c11 -Wall -Wextra -Wpedantic -Isrc src\game.c src\scene.c tools\preview.c -o build\windows\preview.exe
+gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -Isrc src\level.c src\solver.c src\game.c src\scene.c tools\preview.c -o build\windows\preview.exe
 if errorlevel 1 goto failed
-gcc -std=c11 -Wall -Wextra -Wpedantic -Isrc src\game.c src\scene.c tests\test_game.c -o build\windows\test_game.exe
+gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -Isrc src\level.c src\solver.c src\game.c src\scene.c tests\test_game.c -o build\windows\test_game.exe
 if errorlevel 1 goto failed
 cd /d "build\windows"
 test_game.exe
@@ -37,7 +37,7 @@ if not exist "%SDL2_ROOT%\bin\SDL2.dll" (
   echo SDL2.dll missing from SDL2_ROOT\bin.
   goto failed
 )
-gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -I"%SDL2_ROOT%\include\SDL2" src\game.c src\scene.c src\window.c -L"%SDL2_ROOT%\lib" -lmingw32 -lSDL2main -lSDL2 -mwindows -o build\windows\parcel_shift.exe
+gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -I"%SDL2_ROOT%\include\SDL2" src\level.c src\solver.c src\game.c src\scene.c src\window.c -L"%SDL2_ROOT%\lib" -lmingw32 -lSDL2main -lSDL2 -mwindows -o build\windows\parcel_shift.exe
 if errorlevel 1 goto failed
 copy /y "%SDL2_ROOT%\bin\SDL2.dll" "build\windows\SDL2.dll" >nul
 if errorlevel 1 goto failed
@@ -45,7 +45,7 @@ if exist "%SDL2_ROOT%\..\LICENSE.txt" (
   copy /y "%SDL2_ROOT%\..\LICENSE.txt" "build\windows\SDL2-LICENSE.txt" >nul
   if errorlevel 1 goto failed
 )
-echo Built successfully. Run build\windows\parcel_shift.exe 42 2 from the game folder to play.
+echo Built successfully. Run build\windows\parcel_shift.exe 1 2 from the game folder to play.
 :done
 pause
 exit /b 0

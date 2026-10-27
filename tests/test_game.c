@@ -5,110 +5,324 @@
 #include "game.h"
 #include "scene.h"
 
-static void testSharedCommands(void)
-{
-    Position expectedRobot, expectedForklifts[MAX_FORKLIFTS];
-    char expectedMap[ROWS][COLS + 1];
-    int i, expectedRandom;
-    const char *route = "sssdawww";
-
-    initialise(1, 42);
-    for (i = 0; route[i]; i++) {
-        processCommand(route[i]);
-    }
-    expectedRobot = robot;
-    memcpy(expectedForklifts, forklifts, sizeof expectedForklifts);
-    memcpy(expectedMap, map, sizeof expectedMap);
-    expectedRandom = rand();
-
-    /* Pause and rejected movement must not change the random sequence. */
-    processCommand('r');
-    assert(!paused && turns == 0 && score == 0 && lives == 3);
-    assert(forkCount == 1 && totalPackages == 3 && !carrying && !delivered);
-    assert(map[4][2] == 'P');
-    processCommand('p');
-    assert(paused);
-    assert(processCommand('s') == 0 && takeTurn('d') == 0 && turns == 0);
-    processCommand('p');
-    assert(!paused);
-    for (i = 0; route[i]; i++) {
-        processCommand(route[i]);
-    }
-    assert(turns == 8 && score == 100 && delivered == 1 && lives == 3 && !carrying);
-    assert(robot.row == expectedRobot.row && robot.col == expectedRobot.col);
-    assert(memcmp(forklifts, expectedForklifts, sizeof expectedForklifts) == 0);
-    assert(memcmp(map, expectedMap, sizeof expectedMap) == 0);
-    assert(rand() == expectedRandom);
-
-    processCommand('p');
-    processCommand('r');
-    assert(!paused && turns == 0 && getGameStatus() == GAME_PLAYING);
-    /* Set up final-delivery outcomes directly; these are not full playthroughs. */
-    robot.row = 1;
-    robot.col = 2;
-    carrying = 1;
-    delivered = totalPackages - 1;
-    processCommand('a');
-    assert(getGameStatus() == GAME_WON && score == 100);
-    assert(processCommand('s') == 0 && turns == 1);
-    processCommand('p');
-    assert(!paused);
-    processCommand('r');
-    assert(getGameStatus() == GAME_PLAYING && !delivered && score == 0);
-
-    /* Force the forklift to enter D after the final delivery. */
-    robot.row = 1;
-    robot.col = 2;
-    carrying = 1;
-    delivered = totalPackages - 1;
-    lives = 1;
-    forklifts[0].row = 2;
-    forklifts[0].col = 1;
-    map[3][1] = '#';
-    processCommand('a');
-    assert(delivered == totalPackages && lives == 0 && getGameStatus() == GAME_LOST);
-    assert(processCommand('s') == 0 && turns == 1);
-    processCommand('p');
-    assert(!paused);
-    processCommand('r');
-    assert(getGameStatus() == GAME_PLAYING && lives == 3 && turns == 0);
-    assert(map[3][1] == ' ');
-    puts("PASS: shared pause, deterministic restart, win/loss gating and fatal-delivery priority.");
-}
-
-int main(void)
+static void replay(void)
 {
     int i;
-    const char *route="sssdawww";
-    initialise(1,42);
-    for(i=0;route[i];i++) takeTurn(route[i]);
-    assert(score==100 && delivered==1 && lives==3 && !carrying);
-    drawScene(42,0);
-    assert(savePreview("delivered.ppm"));
-    puts("PASS: seed 42, one forklift, sssdawww: delivery, score, lives and HUD draw.");
-    initialise(1,42);
-    assert(takeTurn('w')==0 && turns==0);
-    assert(takeTurn('x')==0 && turns==0);
-    puts("PASS: invalid input and blocked movement do not use a turn.");
-    for(i=0;i<3;i++) {
-        forklifts[0].row=1;forklifts[0].col=2;
-        takeTurn('d');
-        assert(lives==2-i && robot.row==1 && robot.col==1);
+    char route[MAX_SOLUTION + 1];
+    strcpy(route, levelSolution);
+    assert(route[0]);
+    for (i = 0; route[i]; i++) {
+        assert(processCommand(route[i]) == 1);
+        if (delivered < totalPackages) assert(getGameStatus() == GAME_PLAYING);
     }
-    drawScene(42,0);
-    puts("PASS: collisions cost one life, respawn, three collisions cause loss.");
-    initialise(1,42);
-    forklifts[0].row=1;forklifts[0].col=3;map[1][4]='#';
-    takeTurn('d');
-    assert(lives==2 && robot.col==1);
-    puts("PASS: forklift moving into robot detected.");
-    initialise(1,42);
-    carrying=1;robot.row=4;robot.col=1;
-    takeTurn('d');
-    assert(carrying==1 && map[4][2]=='P');
-    drawScene(42,0);
-    puts("PASS: one-package limit and carrying HUD draw.");
-    testSharedCommands();
-    puts("SDL keyboard / resize behaviour still requires an actual window check.");
+    assert(getGameStatus() == GAME_WON && delivered == totalPackages &&
+           score == totalPackages * 100 && lives > 0);
+}
+
+/* Fixed fixture isolates existing rules from procedural generation. */
+static void fixture(void)
+{
+    const char *cells[9] = {
+        "###################", "#D    #     P     #", "# ### # ### ### # #",
+        "#   #   #       # #", "# P ### # ### #   #", "#       #     # P #",
+        "# ### ##### ### # #", "#                 #", "###################"
+    };
+    int r;
+    memset(&currentLevel, 0, sizeof currentLevel);
+    currentLevel.number = 1042; currentLevel.rows = 9; currentLevel.cols = 19;
+    currentLevel.start = (Position){1, 1};
+    currentLevel.forkStarts[0] = (Position){7, 9};
+    currentLevel.forkStarts[1] = (Position){3, 11};
+    currentLevel.forkStarts[2] = (Position){5, 11};
+    currentLevel.forkStarts[3] = (Position){7, 16};
+    for (r = 0; r < 9; r++) strcpy(currentLevel.cells[r], cells[r]);
+    forkCount = 1;
+    restartGame();
+}
+
+static void testRules(void)
+{
+    int i;
+    const char *route = "sssdawww";
+    GameSnapshot expected, actual;
+    fixture();
+    assert(!takeTurn('w') && !takeTurn('x') && turns == 0);
+    for (i = 0; route[i]; i++) takeTurn(route[i]);
+    assert(score == 100 && delivered == 1 && !carrying && lives == 3);
+    captureGame(&expected);
+    processCommand('r'); processCommand('p');
+    assert(paused && !processCommand('s') && !takeTurn('d') && turns == 0);
+    processCommand('p');
+    for (i = 0; route[i]; i++) processCommand(route[i]);
+    captureGame(&actual);
+    assert(memcmp(&expected, &actual, sizeof expected) == 0);
+    processCommand('p'); processCommand('r');
+    assert(!paused && turns == 0 && lives == 3 && !score);
+    for (i = 0; i < 3; i++) {
+        forklifts[0] = (Position){1, 2};
+        takeTurn('d');
+        assert(lives == 2 - i && robot.row == 1 && robot.col == 1);
+    }
+    assert(getGameStatus() == GAME_LOST && !processCommand('s'));
+    processCommand('p'); assert(!paused);
+    processCommand('r'); assert(lives == 3);
+    fixture();
+    carrying = 1; robot = (Position){4, 1};
+    takeTurn('d'); assert(carrying == 1 && map[4][2] == 'P');
+    /* Delivery tiles and their neighbours exclude forklifts. */
+    fixture();
+    robot = (Position){1, 2}; carrying = 1; delivered = 2; lives = 1;
+    forklifts[0] = (Position){2, 1}; map[3][1] = '#';
+    takeTurn('a');
+    assert(delivered == 3 && lives == 1 && getGameStatus() == GAME_WON);
+    lives = 0;
+    assert(getGameStatus() == GAME_LOST);
+    processCommand('r');
+    /* Entering a forklift while carrying preserves the package on respawn. */
+    carrying = 1; forklifts[0] = (Position){1, 2}; takeTurn('d');
+    assert(carrying && lives == 2);
+    fixture();
+    captureGame(&expected);
+    memset(map, '#', sizeof map);
+    map[1][1] = 'D';
+    captureGame(&actual);
+    {
+        GameSnapshot restored;
+        char route[MAX_SOLUTION + 1];
+        assert(!findWinningRoute(route) && !route[0]);
+        captureGame(&restored);
+        assert(memcmp(&actual, &restored, sizeof actual) == 0);
+    }
+    restoreGame(&expected);
+    puts("PASS: delivery, walls, input, pause, restart, collisions, carrying and end conditions.");
+}
+
+static void testHealth(void)
+{
+    int i, r, c, present = 0, absent = 0;
+    GameSnapshot before, after;
+    fixture();
+    for (i = 1; i <= 1000; i++) {
+        currentLevel.number = (unsigned int)i;
+        restartGame();
+        assert(healthPickup.spawnTurn >= 5 && healthPickup.spawnTurn <= 20);
+        present += healthPickup.status == HEALTH_PENDING;
+        absent += healthPickup.status == HEALTH_NONE;
+        captureGame(&before); restartGame(); captureGame(&after);
+        assert(memcmp(&before, &after, sizeof before) == 0);
+    }
+    assert(present && absent);
+    fixture(); forkCount = 0;
+    healthPickup = (HealthPickup){{0, 0}, 5, HEALTH_PENDING};
+    turns = 4;
+    assert(!processCommand('w') && healthPickup.status == HEALTH_PENDING);
+    processCommand('p');
+    assert(!processCommand('d') && healthPickup.status == HEALTH_PENDING);
+    processCommand('p');
+    assert(processCommand('d') && healthPickup.status == HEALTH_ACTIVE);
+    r = healthPickup.position.row; c = healthPickup.position.col;
+    assert(map[r][c] == ' ' && !(robot.row == r && robot.col == c));
+    drawScene(currentLevel.number, 0); assert(savePreview("health.ppm"));
+    captureGame(&before);
+    healthPickup = (HealthPickup){{1, 3}, 5, HEALTH_ACTIVE};
+    processCommand('d');
+    assert(lives == MAX_LIVES && healthPickup.status == HEALTH_ACTIVE);
+    processCommand('a'); lives = 2;
+    processCommand('d');
+    assert(lives == MAX_LIVES && healthPickup.status == HEALTH_COLLECTED);
+    for (i = 0; i < 100; i++) processCommand(i % 2 ? 'd' : 'a');
+    assert(healthPickup.status == HEALTH_COLLECTED);
+    restoreGame(&before); captureGame(&after);
+    assert(memcmp(&before, &after, sizeof before) == 0);
+    fixture(); lives = 1;
+    healthPickup = (HealthPickup){{1, 2}, 5, HEALTH_ACTIVE};
+    forklifts[0] = (Position){1, 2};
+    processCommand('d');
+    assert(lives == 0 && getGameStatus() == GAME_LOST && healthPickup.status == HEALTH_ACTIVE);
+    fixture(); forkCount = 0;
+    healthPickup = (HealthPickup){{0, 0}, 5, HEALTH_NONE};
+    for (i = 0; i < 100; i++) processCommand(i % 2 ? 'a' : 'd');
+    assert(healthPickup.status == HEALTH_NONE);
+    /* Only empty cell is occupied by the robot: defer until space becomes available. */
+    fixture(); forkCount = 0;
+    memset(map, '#', sizeof map);
+    map[1][1] = 'D'; map[1][2] = ' ';
+    healthPickup = (HealthPickup){{0, 0}, 5, HEALTH_PENDING}; turns = 4;
+    processCommand('d'); assert(healthPickup.status == HEALTH_PENDING);
+    processCommand('a');
+    assert(healthPickup.status == HEALTH_ACTIVE && healthPickup.position.row == 1 &&
+           healthPickup.position.col == 2);
+    puts("PASS: optional single health drop, timing, full health, pickup, collisions and snapshots.");
+}
+
+static void testTraffic(void)
+{
+    int r, c, i;
+    GameSnapshot saved, restored;
+    fixture();
+    for (r = 1; r < mapRows - 1; r++)
+        for (c = 1; c < mapCols - 1; c++) map[r][c] = ' ';
+    map[1][1] = 'D';
+    robot = (Position){5, 12}; forklifts[0] = (Position){5, 8};
+    moveForklifts();
+    assert(forklifts[0].col == 9 && forkliftAI[0].chaseLeft == CHASE_TURNS - 1);
+    robot = (Position){5, 16};
+    for (i = 1; i < CHASE_TURNS; i++) moveForklifts();
+    assert(forkliftAI[0].chaseLeft == 0 && forkliftAI[0].cooldown == CHASE_COOLDOWN);
+    for (i = 0; i < CHASE_COOLDOWN; i++) {
+        robot = (Position){4, forklifts[0].col};
+        moveForklifts();
+        assert(forkliftAI[0].chaseLeft == 0);
+    }
+    robot = (Position){4, forklifts[0].col};
+    moveForklifts(); assert(forkliftAI[0].chaseLeft > 0);
+    captureGame(&saved);
+    moveForklifts(); restoreGame(&saved); captureGame(&restored);
+    assert(memcmp(&saved, &restored, sizeof saved) == 0);
+    robot = currentLevel.start;
+    moveForklifts(); assert(forkliftAI[0].chaseLeft == 0);
+    for (i = 0; i < 1000; i++) {
+        moveForklifts(); assert(!isSafeZone(forklifts[0].row, forklifts[0].col));
+    }
+    /* A wall detour puts a visually close robot outside detection distance. */
+    forklifts[0] = (Position){5, 8}; forkliftAI[0] = (ForkliftAI){-1, 0, 0};
+    robot = (Position){5, 12}; map[5][10] = '#';
+    moveForklifts(); assert(!forkliftAI[0].chaseLeft);
+    /* Patrol preserves heading on an open straight corridor. */
+    robot = currentLevel.start; forklifts[0] = (Position){7, 8};
+    forkliftAI[0] = (ForkliftAI){3, 0, 0};
+    moveForklifts(); assert(forklifts[0].col == 9);
+    moveForklifts(); assert(forklifts[0].col == 10);
+    /* A trapped forklift waits. */
+    map[6][10] = map[7][9] = map[7][11] = '#';
+    moveForklifts(); assert(forklifts[0].row == 7 && forklifts[0].col == 10);
+    forkliftAI[0].chaseLeft = 3;
+    drawScene(currentLevel.number, 0); assert(savePreview("chasing.ppm"));
+    drawCollisionNotice(); assert(savePreview("collision.ppm"));
+    restartGame();
+    assert(forkliftAI[0].direction == -1 && !forkliftAI[0].chaseLeft && !forkliftAI[0].cooldown);
+    puts("PASS: safe zones, path detection, chase limit, cooldown, patrol, waiting and AI snapshots.");
+}
+
+static void testValidation(void)
+{
+    Level valid, bad, retry;
+    char error[160];
+    int r, c;
+    assert(generateLevel(&valid, 42, 0) && validateLevel(&valid, error, sizeof error));
+    bad = valid; bad.cells[0][1] = ' '; assert(!validateLevel(&bad, error, sizeof error));
+    bad = valid; bad.cells[1][1] = 'X'; assert(!validateLevel(&bad, error, sizeof error));
+    bad = valid; bad.rows++; assert(!validateLevel(&bad, error, sizeof error));
+    bad = valid; bad.forkStarts[1] = bad.forkStarts[0]; assert(!validateLevel(&bad, error, sizeof error));
+    bad = valid; bad.forkStarts[0] = bad.start; assert(!validateLevel(&bad, error, sizeof error));
+    bad = valid; bad.cells[1][2] = 'P'; assert(!validateLevel(&bad, error, sizeof error));
+    bad = valid;
+    for (r = 0; r < valid.rows; r++) for (c = 0; c < valid.cols; c++) {
+        if (valid.cells[r][c] == 'P') {
+            bad.cells[r - 1][c] = '#'; bad.cells[r + 1][c] = '#';
+            bad.cells[r][c - 1] = '#'; bad.cells[r][c + 1] = '#';
+            r = valid.rows; break;
+        }
+    }
+    assert(!validateLevel(&bad, error, sizeof error));
+    assert(generateLevel(&retry, 999, 1) && retry.rows == 9 && retry.cols == 15);
+    assert(retry.generationSeed >= 100000);
+    assert(generateLevel(&bad, 999, 100));
+    assert(generateLevel(&valid, 1000, 1) && valid.generationSeed == bad.generationSeed + 1);
+    assert(!generateLevel(&bad, 0, 0) && !generateLevel(&bad, 100000, 0));
+    assert(!generateLevel(&bad, 42, 101));
+    puts("PASS: structural rejection and disjoint retry seeds with fixed dimensions.");
+}
+
+static void testLevels(void)
+{
+    const unsigned int numbers[] = {1, 999, 1000, 9999, 10000, 29999, 30000, 59999, 60000, 99999};
+    const int rows[] = {9, 9, 9, 9, 11, 11, 13, 13, 17, 17};
+    const int cols[] = {15, 15, 19, 19, 23, 23, 27, 27, 31, 31};
+    const int packages[] = {3, 3, 4, 4, 4, 4, 5, 5, 5, 5};
+    size_t i;
+    Level original;
+    GameSnapshot before, after;
+    char solution[MAX_SOLUTION + 1];
+    for (i = 0; i < sizeof numbers / sizeof numbers[0]; i++) {
+        assert(initialise(1, numbers[i]));
+        assert(mapRows == rows[i] && mapCols == cols[i]);
+        assert(totalPackages == packages[i] && levelPackageCount(numbers[i]) == packages[i]);
+        assert(validateLevel(&currentLevel, NULL, 0));
+        original = currentLevel;
+        {
+            Level missing = currentLevel;
+            int r, c, removed = 0;
+            for (r = 0; r < mapRows && !removed; r++)
+                for (c = 0; c < mapCols; c++)
+                    if (missing.cells[r][c] == 'P') {
+                        missing.cells[r][c] = ' '; removed = 1; break;
+                    }
+            assert(removed && !validateLevel(&missing, NULL, 0));
+        }
+        captureGame(&before);
+        strcpy(solution, levelSolution);
+        replay();
+        processCommand('r'); captureGame(&after);
+        assert(memcmp(&before, &after, sizeof before) == 0);
+        assert(findWinningRoute(levelSolution)); captureGame(&after);
+        assert(memcmp(&before, &after, sizeof before) == 0);
+        assert(strcmp(solution, levelSolution) == 0);
+        assert(initialise(4, numbers[i]));
+        assert(memcmp(&original, &currentLevel, sizeof original) == 0);
+        assert(totalPackages == packages[i]);
+        replay();
+        printf("PASS: level %u, %dx%d, attempt %d, route replay at 1 and 4 forklifts.\n",
+               numbers[i], mapRows, mapCols, currentLevel.attempt);
+    }
+    assert(initialise(2, 42)); original = currentLevel;
+    assert(initialise(3, 42) && memcmp(&original, &currentLevel, sizeof original) == 0);
+    captureGame(&before);
+    assert(initialise(4, 1000));
+    assert(initialise(3, 42)); captureGame(&after);
+    assert(memcmp(&before, &after, sizeof before) == 0);
+    replay(); processCommand('n'); assert(currentLevel.number == 43 && turns == 0);
+    captureGame(&before); original = currentLevel;
+    assert(!initialise(0, 42) && !initialise(5, 42) && !initialise(1, 0) && !initialise(1, 100000));
+    captureGame(&after);
+    assert(memcmp(&before, &after, sizeof before) == 0 && memcmp(&original, &currentLevel, sizeof original) == 0);
+    assert(initialise(4, 99999)); replay(); processCommand('n');
+    assert(currentLevel.number == 99999 && getGameStatus() == GAME_WON);
+    drawScene(currentLevel.number, paused); assert(savePreview("large.ppm"));
+    puts("PASS: remaining traffic counts, next level, final level and invalid configuration preservation.");
+}
+
+int main(int argc, char **argv)
+{
+    if (argc == 3 && strcmp(argv[1], "--audit") == 0) {
+        int i, count = atoi(argv[2]);
+        if (count < 1 || count > 99999) return 1;
+        for (i = 0; i < count; i++) {
+            unsigned int number = ((unsigned int)i * 7919U) % 99999U + 1;
+            uint32_t fingerprint = UINT32_C(2166136261);
+            int r, c, j;
+            if (!initialise(i % 4 + 1, number)) return 1;
+            for (r = 0; r < mapRows; r++) for (c = 0; c < mapCols; c++)
+                fingerprint = (fingerprint ^ (unsigned char)map[r][c]) * UINT32_C(16777619);
+            for (j = 0; j < MAX_FORKLIFTS; j++) {
+                fingerprint = (fingerprint ^ (uint32_t)currentLevel.forkStarts[j].row) * UINT32_C(16777619);
+                fingerprint = (fingerprint ^ (uint32_t)currentLevel.forkStarts[j].col) * UINT32_C(16777619);
+            }
+            for (j = 0; levelSolution[j]; j++)
+                fingerprint = (fingerprint ^ (unsigned char)levelSolution[j]) * UINT32_C(16777619);
+            replay();
+            printf("%u %d %d %u %lu %d %d\n", number, mapRows, mapCols,
+                   currentLevel.generationSeed, (unsigned long)fingerprint, turns, lives);
+        }
+        return 0;
+    }
+    if (argc == 4 && strcmp(argv[1], "--route") == 0) {
+        if (!initialise(atoi(argv[3]), (unsigned int)strtoul(argv[2], NULL, 10))) return 1;
+        puts(levelSolution); return 0;
+    }
+    testRules(); testHealth(); testTraffic(); testValidation(); testLevels();
+    assert(initialise(2, 42));
+    replay(); drawScene(42, paused); assert(savePreview("delivered.ppm"));
+    puts("PASS: rendering and preview output; SDL event interaction requires a window check.");
     return 0;
 }
