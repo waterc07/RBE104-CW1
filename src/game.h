@@ -19,6 +19,8 @@ extern int paused;
 #define MAX_LIVES 3
 typedef enum { HEALTH_NONE, HEALTH_PENDING, HEALTH_ACTIVE, HEALTH_COLLECTED } HealthStatus;
 typedef struct {
+    /* position 仅在 HEALTH_ACTIVE 时用于地图显示和拾取。
+     * spawnTurn 是预定回合；到时没有空地则保持 HEALTH_PENDING，稍后重试。 */
     Position position;
     int spawnTurn;
     HealthStatus status;
@@ -31,17 +33,15 @@ extern HealthPickup healthPickup;
 #define CHASE_COOLDOWN 4
 #define COLLISION_NOTICE_MS 1500
 typedef struct {
+    /* direction: -1 尚无巡逻方向，0/1/2/3 为上/下/左/右。
+     * chaseLeft 和 cooldown 都按有效移动回合递减，不按屏幕帧数递减。 */
     int direction, chaseLeft, cooldown;
 } ForkliftAI;
 extern ForkliftAI forkliftAI[MAX_FORKLIFTS];
 int isSafeZone(int row, int col);
 void moveForklifts(void);
 
-typedef enum {
-    GAME_PLAYING,
-    GAME_WON,
-    GAME_LOST
-} GameStatus;
+typedef enum { GAME_PLAYING, GAME_WON, GAME_LOST } GameStatus;
 
 /* count 为 1..4，levelNumber 为 1..99999；成功返回 1 并开始新局。
  * 结构与四种叉车配置的获胜路线全部通过才接受；失败返回 0，保留旧局。 */
@@ -55,6 +55,7 @@ extern char levelSolution[MAX_SOLUTION + 1];
  * 固定，故不放进每个节点；message 只供显示，由求解入口另行保存。 */
 typedef struct {
     char board[MAX_ROWS][MAX_COLS + 1];
+    /* board 中一个 P 代表一个包裹；本数组只记录该格额外叠放的数量。 */
     unsigned char extraPackages[MAX_ROWS][MAX_COLS];
     Position bot, traffic[MAX_FORKLIFTS];
     ForkliftAI trafficAI[MAX_FORKLIFTS];

@@ -1,8 +1,10 @@
-/* SDL event-loop check; does not verify physical keyboard delivery. */
+/* 向 SDL 队列发送按键，检查正式事件循环；不验证物理键盘和桌面焦点。 */
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <assert.h>
 static void checkFrame(SDL_Renderer *renderer);
+/* 在正式循环每次完成一帧时检查状态，再排入下一组按键。
+ * 用宏替换显示调用和入口名，使测试可以复用 window.c 的原始循环。 */
 #define SDL_RenderPresent checkFrame
 #define main windowMain
 #include "../src/window.c"
@@ -13,6 +15,7 @@ static int frame;
 
 static void press(SDL_Keycode key)
 {
+    /* 只设置事件循环使用的字段；其余字段清零，避免被当成长按事件。 */
     SDL_Event event;
     SDL_zero(event);
     event.type = SDL_KEYDOWN;
@@ -36,7 +39,11 @@ static void checkFrame(SDL_Renderer *renderer)
     case 2:
         assert(currentLevel.number == 0);
         press(SDLK_DELETE);
-        press(SDLK_6); press(SDLK_0); press(SDLK_0); press(SDLK_0); press(SDLK_0);
+        press(SDLK_6);
+        press(SDLK_0);
+        press(SDLK_0);
+        press(SDLK_0);
+        press(SDLK_0);
         press(SDLK_RETURN); /* Missing forklift count. */
         break;
     case 3:
@@ -48,7 +55,10 @@ static void checkFrame(SDL_Renderer *renderer)
         break;
     case 4:
         assert(currentLevel.number == 0);
-        press(SDLK_LEFT); press(SDLK_RIGHT); press(SDLK_RIGHT); press(SDLK_RIGHT);
+        press(SDLK_LEFT);
+        press(SDLK_RIGHT);
+        press(SDLK_RIGHT);
+        press(SDLK_RIGHT);
         press(SDLK_RETURN);
         break;
     case 5:
@@ -66,7 +76,7 @@ static void checkFrame(SDL_Renderer *renderer)
         press(SDLK_ESCAPE);
         break;
     case 8:
-        break; /* The quit event is followed by the loop's final redraw. */
+        break; /* 退出按键处理后，正式循环还会完成最后一次重绘。 */
     default:
         assert(0 && "window failed to exit");
     }

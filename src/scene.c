@@ -23,11 +23,13 @@ static const uint32_t whiteColor = 0xF2EBFF, mutedColor = 0xA99ABF, purpleColor 
 static void rect(int x, int y, int rectWidth, int rectHeight, uint32_t color)
 {
     int itemIndex, pixelRow;
-    x += offsetX; y += offsetY;
+    x += offsetX;
+    y += offsetY;
     /* 逐像素裁剪到画布内，越界部分不写入缓冲区。 */
     for (pixelRow = y; pixelRow < y + rectHeight; pixelRow++) {
         for (itemIndex = x; itemIndex < x + rectWidth; itemIndex++) {
-            if (itemIndex >= 0 && itemIndex < sceneWidth && pixelRow >= 0 && pixelRow < sceneHeight) {
+            if (itemIndex >= 0 && itemIndex < sceneWidth && pixelRow >= 0 &&
+                pixelRow < sceneHeight) {
                 pixels[pixelRow * sceneWidth + itemIndex] = color;
             }
         }
@@ -57,13 +59,19 @@ static void text(int x, int y, const char *content, int scale, uint32_t color)
     for (itemIndex = 0; content[itemIndex]; itemIndex++) {
         unsigned char glyphChar = (unsigned char)toupper((unsigned char)content[itemIndex]);
         /* 小写转大写；表外字符只绘制下方列出的标点，其他字符留空位。 */
-        glyphIndex = glyphChar >= 'A' && glyphChar <= 'Z' ? glyphChar - 'A' : glyphChar >= '0' && glyphChar <= '9' ? 26 + glyphChar - '0' : -1;
+        glyphIndex = -1;
+        if (glyphChar >= 'A' && glyphChar <= 'Z') {
+            glyphIndex = glyphChar - 'A';
+        } else if (glyphChar >= '0' && glyphChar <= '9') {
+            glyphIndex = 26 + glyphChar - '0';
+        }
         if (glyphIndex >= 0) {
             for (row = 0; row < 7; row++) {
                 for (col = 0; col < 5; col++) {
                     /* 每行的低五位从左到右对应 bit4..bit0，置位才绘制色块。 */
                     if (font[glyphIndex][row] & (1 << (4 - col))) {
-                        rect(x + itemIndex * 6 * scale + col * scale, y + row * scale, scale, scale, color);
+                        rect(x + itemIndex * 6 * scale + col * scale, y + row * scale, scale, scale,
+                             color);
                     }
                 }
             }
@@ -71,8 +79,8 @@ static void text(int x, int y, const char *content, int scale, uint32_t color)
             rect(x + itemIndex * 6 * scale, y + 3 * scale, 5 * scale, scale, color);
         } else if (glyphChar == '/') {
             for (row = 0; row < 7; row++) {
-                rect(x + itemIndex * 6 * scale + (4 - row * 4 / 6) * scale, y + row * scale, scale, scale,
-                     color);
+                rect(x + itemIndex * 6 * scale + (4 - row * 4 / 6) * scale, y + row * scale, scale,
+                     scale, color);
             }
         } else if (glyphChar == ':') {
             rect(x + itemIndex * 6 * scale + scale, y + 2 * scale, scale, scale, color);
@@ -188,14 +196,22 @@ void drawScene(unsigned int seed, int paused)
     int row, col, itemIndex, x, y;
     int tile = TILE_SIZE, originX, originY, iconScale, iconOffset;
     int extraWidth, extraHeight;
+    const char *healthText;
+    const char *statusTitle;
+    const char *statusHint;
     updateSceneSize();
-    extraWidth = sceneWidth - 1280; extraHeight = sceneHeight - 800;
+    extraWidth = sceneWidth - 1280;
+    extraHeight = sceneHeight - 800;
     offsetX = offsetY = 0;
+    /* 836×396 是初始地图区域。扩展后的剩余空间均分到两侧，
+     * originX/originY 是地图左上角，后续再按行列乘格子尺寸定位。 */
     originX = 40 + (836 + extraWidth - tile * mapCols) / 2;
     originY = 242 + (396 + extraHeight - tile * mapRows) / 2;
     /* 内嵌图标为 12×12，使用整数倍率避免像素边缘模糊；offset 负责居中。 */
     iconScale = (tile - 4) / 12;
-    if (iconScale < 1) iconScale = 1;
+    if (iconScale < 1) {
+        iconScale = 1;
+    }
     iconOffset = (tile - 12 * iconScale) / 2;
     char textBuffer[90];
     /* 标题和顶部状态卡片。每帧先清空缓冲区，避免残留上一帧图标。 */
@@ -237,8 +253,9 @@ void drawScene(unsigned int seed, int paused)
             y = originY + row * tile;
             rect(x, y, tile, tile, 0x292235);
             rect(x + 1, y + 1, tile - 2, tile - 2, (row + col) % 2 ? 0x231D31 : 0x251F33);
-            if (map[row][col] != '#' && isSafeZone(row, col))
+            if (map[row][col] != '#' && isSafeZone(row, col)) {
                 rect(x + 1, y + 1, tile - 2, tile - 2, 0x284238);
+            }
             if (map[row][col] == '#') {
                 rect(x + 2, y + 2, tile - 4, tile - 4, 0x443653);
                 rect(x + 2, y + 2, tile - 4, 2, 0x66517F);
@@ -249,8 +266,9 @@ void drawScene(unsigned int seed, int paused)
                 sprite(x + iconOffset, y + iconOffset, box, iconScale, 1);
             }
             if (healthPickup.status == HEALTH_ACTIVE && healthPickup.position.row == row &&
-                healthPickup.position.col == col)
+                healthPickup.position.col == col) {
                 sprite(x + iconOffset, y + iconOffset, heart, iconScale, 3);
+            }
         }
     }
     /* 先画地图，再叠加叉车、机器人及携带图标；显示覆盖不改写地图数据。 */
@@ -265,9 +283,11 @@ void drawScene(unsigned int seed, int paused)
         sprite(originX + forklifts[itemIndex].col * tile + iconOffset,
                originY + forklifts[itemIndex].row * tile + iconOffset, fork, iconScale, 2);
     }
-    sprite(originX + robot.col * tile + iconOffset, originY + robot.row * tile + iconOffset, bot, iconScale, 0);
+    sprite(originX + robot.col * tile + iconOffset, originY + robot.row * tile + iconOffset, bot,
+           iconScale, 0);
     if (carrying) {
-        sprite(originX + robot.col * tile + tile - 13, originY + robot.row * tile + tile - 13, box, 1, 1);
+        sprite(originX + robot.col * tile + tile - 13, originY + robot.row * tile + tile - 13, box,
+               1, 1);
     }
 
     /* 右侧面板：任务进度、携带状态、回合、种子和图例。 */
@@ -302,12 +322,20 @@ void drawScene(unsigned int seed, int paused)
     text(946, 578, "HEART +1 LIFE / MAX 3", 1, mutedColor);
     text(928, 594, "RED MARK - CHASING", 1, 0xFFAB9C);
     text(928, 608, "GREEN TILES - SAFE ZONE", 1, purpleColor);
-    text(928, 624, healthPickup.status == HEALTH_NONE ? "HEALTH: NONE THIS LEVEL" :
-         healthPickup.status == HEALTH_PENDING ? "HEALTH: WAITING" :
-         healthPickup.status == HEALTH_ACTIVE ? "HEALTH: ON MAP" : "HEALTH: COLLECTED", 1, purpleColor);
+    if (healthPickup.status == HEALTH_NONE) {
+        healthText = "HEALTH: NONE THIS LEVEL";
+    } else if (healthPickup.status == HEALTH_PENDING) {
+        healthText = "HEALTH: WAITING";
+    } else if (healthPickup.status == HEALTH_ACTIVE) {
+        healthText = "HEALTH: ON MAP";
+    } else {
+        healthText = "HEALTH: COLLECTED";
+    }
+    text(928, 624, healthText, 1, purpleColor);
 
     /* 底部操作说明和最近一次行动的消息。 */
-    offsetX = 0; offsetY = extraHeight;
+    offsetX = 0;
+    offsetY = extraHeight;
     rect(40, 659, 1200 + extraWidth, 1, lineColor);
     text(40, 677, "CONTROLS", 1, mutedColor);
     for (itemIndex = 0; itemIndex < 4; itemIndex++) {
@@ -323,22 +351,32 @@ void drawScene(unsigned int seed, int paused)
     text(1090 + extraWidth, 766, "RBE104TC / C", 1, mutedColor);
     /* 最后覆盖状态提示；生命耗尽优先于全部送达。 */
     if (paused || getGameStatus() != GAME_PLAYING) {
-        offsetX = extraWidth / 2; offsetY = extraHeight / 2;
+        offsetX = extraWidth / 2;
+        offsetY = extraHeight / 2;
         panel(216, 362, 484, 118);
-        text(246, 390,
-             paused       ? "SHIFT PAUSED"
-             : getGameStatus() == GAME_LOST ? "SHIFT ENDED"
-                          : "ALL DELIVERED",
-             3, whiteColor);
-        text(246, 442, paused ? "SPACE TO CONTINUE" : getGameStatus() == GAME_WON ? "N NEXT LEVEL / R RESTART" : "PRESS R TO START AGAIN", 1, purpleColor);
+        if (paused) {
+            statusTitle = "SHIFT PAUSED";
+            statusHint = "SPACE TO CONTINUE";
+        } else if (getGameStatus() == GAME_LOST) {
+            statusTitle = "SHIFT ENDED";
+            statusHint = "PRESS R TO START AGAIN";
+        } else {
+            statusTitle = "ALL DELIVERED";
+            statusHint = "N NEXT LEVEL / R RESTART";
+        }
+        text(246, 390, statusTitle, 3, whiteColor);
+        text(246, 442, statusHint, 1, purpleColor);
     }
     offsetX = offsetY = 0;
 }
 
 void drawSetup(const char *seed, int count, int field, const char *error)
 {
+    /* 设置页固定使用初始画布。输入内容由 window.c 保存，这里只负责显示；
+     * 空字段显示横线，错误提示由 Enter 校验分支提供。 */
     char buffer[32];
-    sceneWidth = 1280; sceneHeight = 800;
+    sceneWidth = 1280;
+    sceneHeight = 800;
     offsetX = offsetY = 0;
     rect(0, 0, sceneWidth, sceneHeight, backgroundColor);
     text(352, 100, "PARCEL SHIFT", 8, whiteColor);
@@ -349,8 +387,11 @@ void drawSetup(const char *seed, int count, int field, const char *error)
     text(352, 336, seed[0] ? seed : "-", 4, field == 0 ? purpleColor : whiteColor);
     text(340, 414, "FORKLIFTS   1-4", 2, mutedColor);
     rect(328, 450, 624, 64, field == 1 ? lineColor : backgroundColor);
-    if (count > 0) snprintf(buffer, sizeof buffer, "%d", count);
-    else snprintf(buffer, sizeof buffer, "-");
+    if (count > 0) {
+        snprintf(buffer, sizeof buffer, "%d", count);
+    } else {
+        snprintf(buffer, sizeof buffer, "-");
+    }
     text(352, 466, buffer, 4, field == 1 ? purpleColor : whiteColor);
     text(412, 478, "LEFT / RIGHT OR TYPE 1-4", 2, mutedColor);
     text(340, 544, "ONE PLAYER ROBOT - AVOID THE FORKLIFTS", 1, mutedColor);
@@ -362,7 +403,8 @@ void drawSetup(const char *seed, int count, int field, const char *error)
 
 void drawCollisionNotice(void)
 {
-    offsetX = (sceneWidth - 1280) / 2; offsetY = (sceneHeight - 800) / 2;
+    offsetX = (sceneWidth - 1280) / 2;
+    offsetY = (sceneHeight - 800) / 2;
     panel(360, 310, 560, 180);
     text(400, 340, "COLLISION", 4, 0xFFAB9C);
     text(400, 392, "-1 LIFE", 3, whiteColor);

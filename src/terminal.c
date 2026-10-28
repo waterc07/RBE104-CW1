@@ -9,21 +9,31 @@ static void display(void)
 {
     int row, col, itemIndex;
     char symbol;
+    const char *healthText;
     printf("\n=== WAREHOUSE DELIVERY ===\n");
     /* Remaining 包括正在携带但尚未配送的包裹，不是地图上 P 的数量。 */
     printf("Score: %d | Lives: %d | Remaining: %d | Turns: %d\n", score, lives,
            totalPackages - delivered, turns);
     printf("Level: %u | Map: %dx%d\n", currentLevel.number, mapRows, mapCols);
     printf("Carrying: %s | Forklifts: %d\n", carrying ? "PACKAGE" : "nothing", forkCount);
-    printf("Health: %s\n", healthPickup.status == HEALTH_NONE ? "NONE THIS LEVEL" :
-           healthPickup.status == HEALTH_PENDING ? "WAITING" :
-           healthPickup.status == HEALTH_ACTIVE ? "ON MAP" : "COLLECTED");
+    if (healthPickup.status == HEALTH_NONE) {
+        healthText = "NONE THIS LEVEL";
+    } else if (healthPickup.status == HEALTH_PENDING) {
+        healthText = "WAITING";
+    } else if (healthPickup.status == HEALTH_ACTIVE) {
+        healthText = "ON MAP";
+    } else {
+        healthText = "COLLECTED";
+    }
+    printf("Health: %s\n", healthText);
     for (row = 0; row < mapRows; row++) {
         for (col = 0; col < mapCols; col++) {
             /* 按地图、叉车、机器人顺序覆盖显示，不改写地图内容。 */
             symbol = map[row][col];
             if (healthPickup.status == HEALTH_ACTIVE && healthPickup.position.row == row &&
-                healthPickup.position.col == col) symbol = '+';
+                healthPickup.position.col == col) {
+                symbol = '+';
+            }
             for (itemIndex = 0; itemIndex < forkCount; itemIndex++) {
                 if (forklifts[itemIndex].row == row && forklifts[itemIndex].col == col) {
                     symbol = forkliftAI[itemIndex].chaseLeft > 0 ? '!' : 'F';
@@ -119,7 +129,9 @@ int main(void)
             puts("Input ended. Goodbye.");
             return 0;
         }
-        if (initialise(count, (unsigned int)seed)) break;
+        if (initialise(count, (unsigned int)seed)) {
+            break;
+        }
         puts("Level generation failed: no verified winning route. Choose another level.");
     }
     printf("Level: %d. Repeat the level, forklift count and commands to replay.\n", seed);

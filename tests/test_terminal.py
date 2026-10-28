@@ -10,11 +10,13 @@ HUD = re.compile(r"Score: (\d+) \| Lives: (\d+) \| Remaining: (\d+) \| Turns: (\
 
 
 def play(lines):
+    # 每个元素是一行输入。末尾补换行，让最后一个命令也按正常整行输入处理。
     return subprocess.run([str(BUILD / "terminal.exe")], input="\n".join(lines) + "\n",
                           text=True, capture_output=True, timeout=30, check=True).stdout
 
 
 def winning_route(level, count):
+    # 从本次构建的共享核心取路线，避免在测试中写死旧规则下的 WASD 序列。
     return subprocess.check_output([str(BUILD / "test_game.exe"), "--route", str(level), str(count)],
                                    text=True, timeout=30).strip()
 
@@ -24,6 +26,7 @@ class TerminalTests(unittest.TestCase):
         route = winning_route(42, 2)
         output = play(["2", "42", "P", "s", "P", "w", "x", "ss", "s" * 100,
                        *route.upper(), "P", "S", "R", *route, "Q"])
+        # 按每次重绘提取分数、生命、剩余包裹和回合，检查暂停及重开的状态。
         states = [tuple(map(int, match)) for match in HUD.findall(output)]
         self.assertIn("PAUSED", output)
         self.assertIn("Enter exactly one command", output)
@@ -46,6 +49,7 @@ class TerminalTests(unittest.TestCase):
                 self.assertIn("Level: 1000 | Map: 9x19", output)
 
     def test_loss_allows_restart_and_blocks_movement(self):
+        # 固定 Python 随机种子生成输入，重复执行时使用同一条撞击路线。
         rng = random.Random(42)
         route = [rng.choice("wasd") for _ in range(5000)]
         output = play(["4", "42", *route, "p", "s", "r", "q"])

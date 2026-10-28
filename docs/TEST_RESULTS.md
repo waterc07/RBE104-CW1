@@ -1,5 +1,14 @@
 # 测试记录
 
+## 2026-10-28 代码展开与注释整理
+
+- 展开嵌套三目表达式、同一行的多个语句及部分下标自增写法，为控制分支和循环补齐大括号。补充关卡生成、叉车追踪、快照、搜索堆与回溯、SDL 设置页、PCM16 混音和测试夹具的中文注释。音频生成脚本中的匿名函数改为具名函数；未调整规则版本和接口。
+- Windows MinGW GCC 8.1.0：基础构建、GUI 构建、离线音频测试、SDL dummy 事件循环测试均通过 C11 严格编译；`python tests/test_terminal.py` 七项通过。基础构建包含核心断言及十个尺寸边界关卡的 1/4 辆叉车获胜回放。
+- 修改前后各运行 `test_game.exe --audit 250`，全部关卡生成及获胜回放通过，输出逐行一致。对比文件为 `build/windows/style_before_audit.txt` 和 `style_after_audit.txt`。
+- 修改前后的 `preview.ppm`、`delivered.ppm`、`large.ppm`、`health_natural.ppm`、`collision.ppm` SHA-256 相同；本次未新增实际窗口视觉验收。
+- 在 `build/style-audio-before/` 和 `build/style-audio-after/` 分别运行提交版本与整理后的音频脚本，生成的六个 WAV 逐字节一致，未覆盖正式 `assets/`。
+- 本次未进行实际键盘交互、音频试听、Linux 对照或 ASan/UBSan；现有窗口交互待办仍保留。
+
 ## 2026-10-28 提交前复测
 
 本节对应生成/规则版本 6，含碰撞掉包裹、回血概率修复、SDL 开始页、音频和图标。下方按日期保留历史结果，不代表当前版本已重复完成全部检查。

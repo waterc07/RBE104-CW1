@@ -17,6 +17,7 @@ extern uint32_t pixels[MAX_SCENE_WIDTH * MAX_SCENE_HEIGHT];
 /* 关卡初始化成功后调用。读取 game.h 状态并重绘，不推进回合或消耗随机数。
  * seed 是当前关卡号，只用于显示；画布随当前有效行列数扩展。 */
 void drawScene(unsigned int seed, int paused);
+/* 可在关卡初始化前调用；field 为 0/1 选择种子/叉车数，空 error 不显示提示。 */
 void drawSetup(const char *seed, int count, int field, const char *error);
 void drawCollisionNotice(void);
 /* 将当前画布写为二进制 PPM（P6），不重新绘制；成功返回 1，失败返回 0。 */
