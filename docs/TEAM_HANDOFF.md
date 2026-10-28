@@ -16,9 +16,14 @@
 | 配色、图标、字体和 HUD | `src/scene.c` |
 | 固定格子尺寸、画布与窗口大小 | `src/scene.h` 的 `TILE_SIZE`、`src/scene.c` 的 `updateSceneSize`、`src/window.c` 的 `resizeScene` |
 | 共享暂停、重开、胜负判断 | `src/game.c` 的 `processCommand`、`getGameStatus` |
-| SDL 按键映射、窗口与缩放 | `src/window.c` |
+| SDL 按键映射、窗口、缩放与音效触发 | `src/window.c` |
+| SDL 开始页输入与绘制 | `src/window.c` 的设置分支、`src/scene.c` 的 `drawSetup`；无参数启动时两个字段留空，Enter 校验后调用共享 `initialise` |
+| 背景音乐与事件音效 | `src/audio.c/.h`、`assets/*.wav`；生成脚本在 `tools/make_music.py`、`tools/make_sfx.py` |
+| EXE 图标 | `assets/parcel_shift.ico`、`game_icon.rc`；GUI 构建用 `windres` 编译 |
 | 终端输入、显示及命令映射 | `src/terminal.c` |
 | 规则回归检查 | `tests/test_game.c` |
+| SDL 开始页与事件循环检查 | `tests/test_window.c`，构建目标 `window-test` |
+| WAV 与混音检查 | `tests/test_audio.c`，构建目标 `audio` |
 
 `terminal.c` 和 `window.c` 都链接 `game.c`，游戏操作统一调用 `processCommand()`，胜负状态读取 `getGameStatus()`。不要在前端复制规则。修改共享接口时同步更新 `game.h`、`scene.h` 及调用处。
 
@@ -35,15 +40,16 @@
 
 - 改规则：运行基础构建，在 `tests/test_game.c` 中增加对应边界的断言，并运行 `python tests/test_terminal.py` 检查终端命令行为。该测试需要已构建的 `build/windows/terminal.exe`。
 - 改显示：运行基础构建生成 PPM，查看实际画面；需要更新 README 配图时再替换 `docs/images/preview.png`。
-- 改窗口或按键：编译 GUI，并在实际 SDL 窗口验证。自动测试不经过窗口事件循环。
+- 改音频：运行 `scripts\build_basic.bat audio` 检查 WAV 和混音，再在实际 SDL 窗口试听移动、拾取、碰撞、配送、通关、暂停、重开和退出。离线测试不检查声音设备或事件触发。分发时保留 EXE 旁的六个 WAV。
+- 改窗口或按键：编译 GUI，运行 `scripts\build_basic.bat window-test`，再在实际 SDL 窗口验证。该测试使用 dummy 驱动向正式事件循环发送事件，不检查物理键盘、桌面焦点、输入法或实际声音。
 - 记录编译器、seed、叉车数、输入顺序、预期和实际结果。测试中手动修改状态的场景应明确标注。
 
 ## 提交前待办
 
 - 以终端版准备课程提交；如附交 SDL 版，确认附交方式。在课程指定环境验证构建和运行。
-- 完成窗口移动、暂停、重开、缩放、通关与失败检查，记录 seed、叉车数及按键路线。
+- 完成开始页填写与进入游戏、窗口移动、暂停、重开、缩放、通关、失败和正常退出检查，记录 seed、叉车数及按键路线；补充实际音频试听。
 - 补充终端版人工交互试玩；共享核心断言与终端重定向输入的胜负流程已覆盖，范围见测试记录。
-- 核对携带包裹重生、无路可走的叉车、最终配送与致命碰撞等细节是否符合教师说明。
+- 核对碰撞掉落包裹、无路可走的叉车、最终配送与致命碰撞等细节是否符合教师说明。
 - 准备不超过 1500 词的 PDF 报告、源码、构建运行说明、至少三个可复现场景，以及真实贡献和协助声明。
 - 核对课程通知中的截止日期与配套评分表；当前目录未包含评分表。
 

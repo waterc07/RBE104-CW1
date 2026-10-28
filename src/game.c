@@ -9,6 +9,8 @@
  * 前端只显示这些状态，移动、配送和胜负由本文件统一处理。 */
 char map[MAX_ROWS][MAX_COLS + 1];
 int mapRows, mapCols;
+/* 每格 P 之外重叠的包裹数；前端仍显示一个包裹图标。 */
+static unsigned char extraPackages[MAX_ROWS][MAX_COLS];
 Level currentLevel;
 Position robot, forklifts[MAX_FORKLIFTS];
 int forkCount, lives, score, carrying, delivered, totalPackages, turns;
@@ -31,6 +33,7 @@ void restartGame(void)
     int row, col, itemIndex;
     /* 使用地图副本保存拾取结果，重开时恢复原始包裹。 */
     memcpy(map, currentLevel.cells, sizeof map);
+    memset(extraPackages, 0, sizeof extraPackages);
     mapRows = currentLevel.rows;
     mapCols = currentLevel.cols;
     robot = currentLevel.start;
@@ -57,6 +60,10 @@ void restartGame(void)
     {
         /* 独立序列，不改变叉车的随机数消耗。重开复现掉落概率和回合。 */
         uint32_t dropSeed = currentLevel.number ^ UINT32_C(0xA341316C);
+        /* 混合相邻关卡号，避免直接取 LCG 第一次输出的高位导致连续多关不掉落。 */
+        dropSeed = (dropSeed ^ (dropSeed >> 16)) * UINT32_C(0x7FEB352D);
+        dropSeed = (dropSeed ^ (dropSeed >> 15)) * UINT32_C(0x846CA68B);
+        dropSeed ^= dropSeed >> 16;
         memset(&healthPickup, 0, sizeof healthPickup);
         healthPickup.status = (nextRandom(&dropSeed) >> 31) ? HEALTH_PENDING : HEALTH_NONE;
         healthPickup.spawnTurn = 5 + (int)((nextRandom(&dropSeed) >> 16) % 16);
@@ -70,6 +77,7 @@ void captureGame(GameSnapshot *state)
      * 当前关卡、尺寸和叉车数量在一轮搜索中固定，不逐节点复制。 */
     memset(state, 0, sizeof *state);
     memcpy(state->board, map, sizeof map);
+    memcpy(state->extraPackages, extraPackages, sizeof extraPackages);
     state->bot = robot;
     memcpy(state->traffic, forklifts, sizeof forklifts);
     memcpy(state->trafficAI, forkliftAI, sizeof forkliftAI);
@@ -85,6 +93,7 @@ void restoreGame(const GameSnapshot *state)
     /* 只恢复可变状态；调用方必须保持相同的 currentLevel 和 forkCount。
      * message 不影响规则，若需要恢复提示文本，调用方须另外保存。 */
     memcpy(map, state->board, sizeof map);
+    memcpy(extraPackages, state->extraPackages, sizeof extraPackages);
     robot = state->bot;
     memcpy(forklifts, state->traffic, sizeof forklifts);
     memcpy(forkliftAI, state->trafficAI, sizeof forkliftAI);
@@ -238,11 +247,14 @@ void moveForklifts(void)
 
 void handlePackage(void)
 {
-    /* 拾取后才从地图移除包裹；携带状态在配送时清零。 */
+    /* 重叠包裹每次只拿一个，最后一个拿走后清除地图标记。 */
     if (map[robot.row][robot.col] == 'P') {
         if (!carrying) {
             carrying = 1;
-            map[robot.row][robot.col] = ' ';
+            if (extraPackages[robot.row][robot.col])
+                extraPackages[robot.row][robot.col]--;
+            else
+                map[robot.row][robot.col] = ' ';
             strcpy(message, "Package collected. Return to D.");
         } else {
             strcpy(message, "Already carrying one; this package stays here.");
@@ -255,13 +267,13 @@ void handlePackage(void)
     }
 }
 
-static void spawnHealth(void)
+static int spawnHealth(void)
 {
     Position choices[MAX_ROWS * MAX_COLS];
     int r, c, i, count = 0;
     uint32_t dropSeed = currentLevel.number ^ UINT32_C(0xC8013EA4);
     if (healthPickup.status != HEALTH_PENDING || turns < healthPickup.spawnTurn ||
-        getGameStatus() != GAME_PLAYING) return;
+        getGameStatus() != GAME_PLAYING) return 0;
     for (r = 0; r < mapRows; r++) {
         for (c = 0; c < mapCols; c++) {
             int occupied = robot.row == r && robot.col == c;
@@ -275,7 +287,9 @@ static void spawnHealth(void)
     if (count) {
         healthPickup.position = choices[(nextRandom(&dropSeed) >> 16) % (uint32_t)count];
         healthPickup.status = HEALTH_ACTIVE;
+        return 1;
     }
+    return 0;
 }
 
 int takeTurn(char command)
@@ -320,15 +334,20 @@ int takeTurn(char command)
     if (collision()) {
         hit = 1;
     }
-    /* 两次检查合并结算，最多扣一命；重生不清空 carrying 和已配送数量。 */
+    /* 两次检查合并结算，最多扣一命；先在碰撞格放下包裹，再重生。 */
     if (hit) {
+        if (carrying) {
+            if (map[row][col] == 'P') extraPackages[row][col]++;
+            else map[row][col] = 'P';
+            carrying = 0;
+        }
         lives--;
         robot = currentLevel.start;
         for (itemIndex = 0; itemIndex < forkCount; itemIndex++) {
             forklifts[itemIndex] = currentLevel.forkStarts[itemIndex];
             forkliftAI[itemIndex] = (ForkliftAI){-1, 0, 0};
         }
-        strcpy(message, "Collision! -1 life. Back to D; carried package is kept.");
+        strcpy(message, "Collision! -1 life. Back to base; any carried package dropped at collision site.");
     }
     /* 碰撞回合不拾取，避免回血抵消扣命并遮掉前端碰撞提示。满血保留道具。 */
     if (!hit && healthPickup.status == HEALTH_ACTIVE && lives < MAX_LIVES &&
@@ -337,7 +356,8 @@ int takeTurn(char command)
         healthPickup.status = HEALTH_COLLECTED;
         strcpy(message, "Health collected. +1 life.");
     }
-    spawnHealth();
+    if (spawnHealth() && !hit)
+        strcpy(message, "Health dropped! Look for the heart (+ in terminal).");
     return 1;
 }
 

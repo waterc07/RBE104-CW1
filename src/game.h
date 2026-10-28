@@ -55,6 +55,7 @@ extern char levelSolution[MAX_SOLUTION + 1];
  * 固定，故不放进每个节点；message 只供显示，由求解入口另行保存。 */
 typedef struct {
     char board[MAX_ROWS][MAX_COLS + 1];
+    unsigned char extraPackages[MAX_ROWS][MAX_COLS];
     Position bot, traffic[MAX_FORKLIFTS];
     ForkliftAI trafficAI[MAX_FORKLIFTS];
     int lifeCount, points, hasPackage, deliveredCount, turnCount, isPaused;

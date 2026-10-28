@@ -32,7 +32,8 @@ static int sameState(const GameSnapshot *a, const GameSnapshot *b)
         (a->health.status != HEALTH_PENDING || a->turnCount == b->turnCount) &&
         memcmp(a->traffic, b->traffic, sizeof a->traffic) == 0 &&
         memcmp(a->trafficAI, b->trafficAI, sizeof a->trafficAI) == 0 &&
-        memcmp(a->board, b->board, sizeof a->board) == 0;
+        memcmp(a->board, b->board, sizeof a->board) == 0 &&
+        memcmp(a->extraPackages, b->extraPackages, sizeof a->extraPackages) == 0;
 }
 
 static uint32_t stateHash(const GameSnapshot *s)

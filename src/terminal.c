@@ -15,6 +15,9 @@ static void display(void)
            totalPackages - delivered, turns);
     printf("Level: %u | Map: %dx%d\n", currentLevel.number, mapRows, mapCols);
     printf("Carrying: %s | Forklifts: %d\n", carrying ? "PACKAGE" : "nothing", forkCount);
+    printf("Health: %s\n", healthPickup.status == HEALTH_NONE ? "NONE THIS LEVEL" :
+           healthPickup.status == HEALTH_PENDING ? "WAITING" :
+           healthPickup.status == HEALTH_ACTIVE ? "ON MAP" : "COLLECTED");
     for (row = 0; row < mapRows; row++) {
         for (col = 0; col < mapCols; col++) {
             /* 按地图、叉车、机器人顺序覆盖显示，不改写地图内容。 */
@@ -159,7 +162,7 @@ int main(void)
             if (lives < previousLives) {
                 puts("\n+----------------------------------------+");
                 puts("| COLLISION -1 LIFE - BACK TO BASE        |");
-                puts("| Carried package kept.                  |");
+                puts("| Any carried package dropped at impact. |");
                 puts("+----------------------------------------+");
             }
         }

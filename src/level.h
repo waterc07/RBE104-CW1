@@ -10,7 +10,7 @@
 /* 首次候选不计入重试次数，因此最多检查 101 张候选地图。 */
 #define LEVEL_ATTEMPTS 100
 #define MAX_SOLUTION 4096
-#define LEVEL_GENERATOR_VERSION 4
+#define LEVEL_GENERATOR_VERSION 6
 #define DEFAULT_LEVEL 1U
 
 /* 零起始行列坐标：row 向下增加，col 向右增加。 */

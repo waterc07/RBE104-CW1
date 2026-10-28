@@ -2,9 +2,11 @@
 /* 流程：解析参数 → 创建窗口资源 → 处理事件并重绘 → 按逆序释放资源。 */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <SDL.h>
 #include "game.h"
 #include "scene.h"
+#include "audio.h"
 
 static int resizeScene(SDL_Window *window, SDL_Renderer *renderer, SDL_Texture **texture)
 {
@@ -45,11 +47,13 @@ int main(int argCount, char **argValues)
     SDL_Renderer *renderer;
     SDL_Texture *texture = NULL;
     SDL_Event event;
-    int running = 1, count = 2, textureWidth, textureHeight, failed = 0;
-    unsigned int seed = DEFAULT_LEVEL;
+    int running = 1, count = 0, textureWidth, textureHeight, failed = 0;
+    unsigned int seed = 0;
     Uint32 collisionStarted = 0;
     int collisionNotice = 0;
-    /* 可选参数依次为关卡号和叉车数；省略时从第 1 关、2 辆叉车开始。 */
+    int configuring = 1, field = 0;
+    char levelInput[6] = "", setupError[80] = "";
+    /* 可选参数只预填设置页；未提供的字段留空。 */
     if (argCount > 1) {
         char *parseEnd;
         /* parseEnd 必须指向字符串末尾，拒绝 12abc 这样的部分数字输入。 */
@@ -71,16 +75,12 @@ int main(int argCount, char **argValues)
         fprintf(stderr, "Usage: parcel_shift [level 1-99999] [forklifts 1-4]\n");
         return 1;
     }
-    /* 地图和四种叉车配置验收成功后才分配窗口资源；失败时没有 SDL 资源待清理。 */
-    if (!initialise(count, seed)) {
-        fprintf(stderr, "Level generation failed: no verified winning route.\n");
-        return 1;
-    }
+    if (seed != 0) snprintf(levelInput, sizeof levelInput, "%u", seed);
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "%s\n", SDL_GetError());
         return 1;
     }
-    updateSceneSize();
+    sceneWidth = 1280; sceneHeight = 800;
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     window = SDL_CreateWindow("Parcel Shift", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280,
                               800, SDL_WINDOW_RESIZABLE);
@@ -101,6 +101,7 @@ int main(int argCount, char **argValues)
     textureWidth = sceneWidth; textureHeight = sceneHeight;
     /* 游戏只使用按键事件；关闭文本输入，避免输入法接管操作键。 */
     SDL_StopTextInput();
+    initAudio();
     while (running) {
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
@@ -112,7 +113,42 @@ int main(int argCount, char **argValues)
             /* 忽略系统长按连发，每次按下最多移动一格。 */
             if (event.type == SDL_KEYDOWN && !event.key.repeat) {
                 SDL_Keycode key = event.key.keysym.sym;
+                if (configuring) {
+                    size_t length = strlen(levelInput);
+                    int digit = key >= SDLK_0 && key <= SDLK_9 ? (int)(key - SDLK_0) :
+                                key >= SDLK_KP_1 && key <= SDLK_KP_9 ? (int)(key - SDLK_KP_1 + 1) :
+                                key == SDLK_KP_0 ? 0 : -1;
+                    setupError[0] = '\0';
+                    if (key == SDLK_ESCAPE || key == SDLK_q) running = 0;
+                    else if (key == SDLK_TAB || key == SDLK_UP || key == SDLK_DOWN) field = !field;
+                    else if (field == 0 && key == SDLK_BACKSPACE && length > 0)
+                        levelInput[length - 1] = '\0';
+                    else if (field == 0 && key == SDLK_DELETE) levelInput[0] = '\0';
+                    else if (field == 0 && digit >= 0 && length < sizeof levelInput - 1) {
+                        levelInput[length] = (char)('0' + digit);
+                        levelInput[length + 1] = '\0';
+                    } else if (field == 1 && digit >= 1 && digit <= MAX_FORKLIFTS) count = digit;
+                    else if (field == 1 && (key == SDLK_BACKSPACE || key == SDLK_DELETE)) count = 0;
+                    else if (field == 1 && key == SDLK_LEFT) { if (count > 1) count--; else count = 1; }
+                    else if (field == 1 && key == SDLK_RIGHT && count < MAX_FORKLIFTS) count++;
+                    else if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+                        seed = (unsigned int)strtoul(levelInput, NULL, 10);
+                        if (seed < 1 || seed > 99999)
+                            snprintf(setupError, sizeof setupError, "ENTER A SEED FROM 1 TO 99999");
+                        else if (count < 1 || count > MAX_FORKLIFTS)
+                            snprintf(setupError, sizeof setupError, "ENTER A FORKLIFT COUNT FROM 1 TO 4");
+                        else if (!initialise(count, seed))
+                            snprintf(setupError, sizeof setupError, "GENERATION FAILED - CHOOSE ANOTHER SEED");
+                        else configuring = 0;
+                    }
+                    continue;
+                }
                 int previousLives = lives;
+                int previousTurns = turns;
+                int previousCarrying = carrying;
+                int previousDelivered = delivered;
+                int isMove = key == SDLK_w || key == SDLK_UP || key == SDLK_s || key == SDLK_DOWN ||
+                             key == SDLK_a || key == SDLK_LEFT || key == SDLK_d || key == SDLK_RIGHT;
                 if (collisionNotice && key != SDLK_q && key != SDLK_ESCAPE && key != SDLK_r)
                     continue;
                 /* 退出和重开在暂停、胜负结算后也有效；重开沿用原种子。 */
@@ -120,12 +156,15 @@ int main(int argCount, char **argValues)
                     running = 0;
                 } else if (key == SDLK_r) {
                     processCommand('r');
+                    stopEffects();
                     collisionNotice = 0;
                 } else if (key == SDLK_n) {
                     /* 能否换关由共享核心判断，窗口不复制胜负或关卡边界规则。 */
                     processCommand('n');
+                    stopEffects();
                 } else if (key == SDLK_SPACE) {
                     processCommand('p');
+                    if (paused) stopEffects();
                 } else {
                     if (key == SDLK_w || key == SDLK_UP) {
                         processCommand('w');
@@ -137,6 +176,13 @@ int main(int argCount, char **argValues)
                         processCommand('d');
                     }
                 }
+                if (isMove && turns > previousTurns) {
+                    if (delivered > previousDelivered)
+                        playEffect(delivered >= totalPackages ? SFX_VICTORY : SFX_DELIVERY);
+                    else if (lives < previousLives) playEffect(SFX_CAPTURE);
+                    else if (!previousCarrying && carrying) playEffect(SFX_PICKUP);
+                    else playEffect(SFX_STEP);
+                }
                 if (lives < previousLives) {
                     collisionStarted = SDL_GetTicks();
                     collisionNotice = 1;
@@ -147,7 +193,8 @@ int main(int argCount, char **argValues)
             collisionNotice = 0;
         /* 暂停和结束时仍重绘；回合只由上面的移动事件推进。 */
         /* N 可能改变当前关卡；不能继续显示启动参数中的旧 seed。 */
-        drawScene(currentLevel.number, paused);
+        if (configuring) drawSetup(levelInput, count, field, setupError);
+        else drawScene(currentLevel.number, paused);
         if (textureWidth != sceneWidth || textureHeight != sceneHeight) {
             if (!resizeScene(window, renderer, &texture)) {
                 fprintf(stderr, "%s\n", SDL_GetError());
@@ -169,6 +216,7 @@ int main(int argCount, char **argValues)
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    closeAudio();
     SDL_Quit();
     return failed;
 }

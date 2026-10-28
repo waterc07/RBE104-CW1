@@ -78,9 +78,9 @@ static void testRules(void)
     lives = 0;
     assert(getGameStatus() == GAME_LOST);
     processCommand('r');
-    /* Entering a forklift while carrying preserves the package on respawn. */
+    /* Entering a forklift drops the carried package before respawning. */
     carrying = 1; forklifts[0] = (Position){1, 2}; takeTurn('d');
-    assert(carrying && lives == 2);
+    assert(!carrying && lives == 2 && map[1][2] == 'P');
     fixture();
     captureGame(&expected);
     memset(map, '#', sizeof map);
@@ -97,9 +97,58 @@ static void testRules(void)
     puts("PASS: delivery, walls, input, pause, restart, collisions, carrying and end conditions.");
 }
 
+static void testPackageDrop(void)
+{
+    GameSnapshot dropped, restored;
+    int i;
+    /* 手动夹具：拾取后走入叉车，落点应是碰撞格而非起点或原包裹格。 */
+    fixture(); forkCount = 0;
+    robot = (Position){4, 1};
+    assert(processCommand('d') && carrying && map[4][2] == ' ');
+    forkCount = 1; forklifts[0] = (Position){5, 2};
+    assert(processCommand('s'));
+    assert(!carrying && lives == 2 && map[5][2] == 'P' && map[4][2] == ' ');
+    assert(robot.row == currentLevel.start.row && robot.col == currentLevel.start.col);
+    assert(score == 0 && delivered == 0 && totalPackages == 3 && turns == 2);
+    forkCount = 0; robot = (Position){5, 1};
+    assert(processCommand('d') && carrying && map[5][2] == ' ');
+    processCommand('r');
+    assert(!carrying && lives == MAX_LIVES && map[4][2] == 'P' && map[5][2] == ' ');
+
+    /* 叉车主动撞到刚拾取包裹的机器人。 */
+    fixture(); robot = (Position){4, 1}; forklifts[0] = (Position){5, 2};
+    processCommand('d');
+    assert(!carrying && lives == 2 && map[4][2] == 'P');
+
+    /* 落点已有包裹：快照恢复后仍可分两次拾取和配送。 */
+    fixture(); forkCount = 0; robot = (Position){1, 11};
+    processCommand('d'); assert(carrying);
+    robot = (Position){4, 1}; forkCount = 1; forklifts[0] = (Position){4, 2};
+    processCommand('d');
+    assert(!carrying && lives == 2 && map[4][2] == 'P');
+    captureGame(&dropped);
+    processCommand('r'); restoreGame(&dropped); captureGame(&restored);
+    assert(memcmp(&dropped, &restored, sizeof dropped) == 0);
+    forkCount = 0;
+    for (i = 0; i < 2; i++) {
+        robot = (Position){4, 1}; processCommand('d');
+        assert(carrying && map[4][2] == (i == 0 ? 'P' : ' '));
+        robot = (Position){1, 2}; processCommand('a');
+        assert(!carrying && delivered == i + 1 && score == (i + 1) * 100);
+    }
+    /* 致命碰撞仍掉落；空手碰撞不生成包裹。 */
+    fixture(); robot = (Position){1, 11}; forkCount = 0; processCommand('d');
+    robot = (Position){5, 1}; forkCount = 1; forklifts[0] = (Position){5, 2}; lives = 1;
+    processCommand('d');
+    assert(!carrying && map[5][2] == 'P' && getGameStatus() == GAME_LOST);
+    fixture(); robot = (Position){5, 1}; forklifts[0] = (Position){5, 2};
+    processCommand('d'); assert(!carrying && lives == 2 && map[5][2] == ' ');
+    puts("PASS: collision package drops, pickup, stacking, snapshots, restart and fatal collision.");
+}
+
 static void testHealth(void)
 {
-    int i, r, c, present = 0, absent = 0;
+    int i, r, c, present = 0, absent = 0, earlyPresent = 0;
     GameSnapshot before, after;
     fixture();
     for (i = 1; i <= 1000; i++) {
@@ -107,11 +156,27 @@ static void testHealth(void)
         restartGame();
         assert(healthPickup.spawnTurn >= 5 && healthPickup.spawnTurn <= 20);
         present += healthPickup.status == HEALTH_PENDING;
+        if (i <= 20) earlyPresent += healthPickup.status == HEALTH_PENDING;
         absent += healthPickup.status == HEALTH_NONE;
         captureGame(&before); restartGame(); captureGame(&after);
         assert(memcmp(&before, &after, sizeof before) == 0);
     }
-    assert(present && absent);
+    assert(present >= 400 && present <= 600 && absent >= 400 && absent <= 600);
+    assert(earlyPresent >= 5 && earlyPresent <= 15);
+    /* 正常生成的第 4 关，在安全区来回移动，不手动注入道具或回合数。 */
+    assert(initialise(1, 4));
+    assert(healthPickup.status == HEALTH_PENDING && healthPickup.spawnTurn == 11);
+    for (i = 0; i < 11; i++) {
+        assert(processCommand(i % 2 ? 'a' : 'd'));
+        assert(healthPickup.status == (i < 10 ? HEALTH_PENDING : HEALTH_ACTIVE));
+    }
+    assert(strstr(message, "Health dropped!") && lives == MAX_LIVES);
+    drawScene(currentLevel.number, 0); assert(savePreview("health_natural.ppm"));
+    captureGame(&before);
+    processCommand('r');
+    for (i = 0; i < 11; i++) assert(processCommand(i % 2 ? 'a' : 'd'));
+    captureGame(&after);
+    assert(memcmp(&before, &after, sizeof before) == 0);
     fixture(); forkCount = 0;
     healthPickup = (HealthPickup){{0, 0}, 5, HEALTH_PENDING};
     turns = 4;
@@ -320,7 +385,7 @@ int main(int argc, char **argv)
         if (!initialise(atoi(argv[3]), (unsigned int)strtoul(argv[2], NULL, 10))) return 1;
         puts(levelSolution); return 0;
     }
-    testRules(); testHealth(); testTraffic(); testValidation(); testLevels();
+    testRules(); testPackageDrop(); testHealth(); testTraffic(); testValidation(); testLevels();
     assert(initialise(2, 42));
     replay(); drawScene(42, paused); assert(savePreview("delivered.ppm"));
     puts("PASS: rendering and preview output; SDL event interaction requires a window check.");

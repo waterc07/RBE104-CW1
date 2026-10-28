@@ -302,6 +302,9 @@ void drawScene(unsigned int seed, int paused)
     text(946, 578, "HEART +1 LIFE / MAX 3", 1, mutedColor);
     text(928, 594, "RED MARK - CHASING", 1, 0xFFAB9C);
     text(928, 608, "GREEN TILES - SAFE ZONE", 1, purpleColor);
+    text(928, 624, healthPickup.status == HEALTH_NONE ? "HEALTH: NONE THIS LEVEL" :
+         healthPickup.status == HEALTH_PENDING ? "HEALTH: WAITING" :
+         healthPickup.status == HEALTH_ACTIVE ? "HEALTH: ON MAP" : "HEALTH: COLLECTED", 1, purpleColor);
 
     /* 底部操作说明和最近一次行动的消息。 */
     offsetX = 0; offsetY = extraHeight;
@@ -332,13 +335,38 @@ void drawScene(unsigned int seed, int paused)
     offsetX = offsetY = 0;
 }
 
+void drawSetup(const char *seed, int count, int field, const char *error)
+{
+    char buffer[32];
+    sceneWidth = 1280; sceneHeight = 800;
+    offsetX = offsetY = 0;
+    rect(0, 0, sceneWidth, sceneHeight, backgroundColor);
+    text(352, 100, "PARCEL SHIFT", 8, whiteColor);
+    text(424, 186, "CHOOSE YOUR DELIVERY RUN", 3, mutedColor);
+    panel(300, 250, 680, 330);
+    text(340, 284, "SEED / LEVEL   1-99999", 2, mutedColor);
+    rect(328, 320, 624, 64, field == 0 ? lineColor : backgroundColor);
+    text(352, 336, seed[0] ? seed : "-", 4, field == 0 ? purpleColor : whiteColor);
+    text(340, 414, "FORKLIFTS   1-4", 2, mutedColor);
+    rect(328, 450, 624, 64, field == 1 ? lineColor : backgroundColor);
+    if (count > 0) snprintf(buffer, sizeof buffer, "%d", count);
+    else snprintf(buffer, sizeof buffer, "-");
+    text(352, 466, buffer, 4, field == 1 ? purpleColor : whiteColor);
+    text(412, 478, "LEFT / RIGHT OR TYPE 1-4", 2, mutedColor);
+    text(340, 544, "ONE PLAYER ROBOT - AVOID THE FORKLIFTS", 1, mutedColor);
+    text(340, 610, "TAB / UP / DOWN: SELECT FIELD", 2, mutedColor);
+    text(340, 648, "SEED: TYPE DIGITS / BACKSPACE / DELETE", 2, mutedColor);
+    text(340, 694, "ENTER: START    ESC: QUIT", 3, purpleColor);
+    text(340, 754, error, 2, 0xFFAB9C);
+}
+
 void drawCollisionNotice(void)
 {
     offsetX = (sceneWidth - 1280) / 2; offsetY = (sceneHeight - 800) / 2;
     panel(360, 310, 560, 180);
     text(400, 340, "COLLISION", 4, 0xFFAB9C);
     text(400, 392, "-1 LIFE", 3, whiteColor);
-    text(400, 435, lives > 0 ? "BACK TO BASE - PACKAGE KEPT" : "NO LIVES LEFT", 2, purpleColor);
+    text(400, 435, lives > 0 ? "IF CARRYING: PACKAGE DROPPED" : "NO LIVES LEFT", 2, purpleColor);
     text(400, 465, "CONTINUING IN 1.5 SECONDS", 1, mutedColor);
     offsetX = offsetY = 0;
 }

@@ -55,6 +55,13 @@ class TerminalTests(unittest.TestCase):
         self.assertTrue(all(state == states[first_loss] for state in states[first_loss:-1]))
         self.assertEqual(states[-1], (0, 3, 3, 0))
 
+    def test_natural_health_drop(self):
+        output = play(["1", "4", *"dadadadadad", "q"])
+        self.assertIn("Health: WAITING", output)
+        self.assertIn("Health dropped!", output)
+        self.assertIn("Health: ON MAP", output)
+        self.assertIn("Health: NONE THIS LEVEL", play(["1", "1", "q"]))
+
     def test_numeric_validation_and_eof(self):
         self.assertIn("Level: 1 | Map: 9x15", play(["2", "", "q"]))
         output = play(["0", "5", "1", "0", "100000", "-1", "42"])
