@@ -43,8 +43,10 @@ void moveForklifts(void);
 
 typedef enum { GAME_PLAYING, GAME_WON, GAME_LOST } GameStatus;
 
-/* count 为 1..4，levelNumber 为 1..99999；成功返回 1 并开始新局。
- * 结构与四种叉车配置的获胜路线全部通过才接受；失败返回 0，保留旧局。 */
+/* count 为 1..5，levelNumber 为 1..99999；成功返回 1 并开始新局。
+ * 选择 1..4 时仍验收原四种叉车配置，保证旧地图不变；选择 5 时额外验收
+ * 第五种配置，必要时换用后续候选，因此 5 的地图可能与 1..4 不同。
+ * 失败返回 0，保留旧局。 */
 int initialise(int count, unsigned int levelNumber);
 /* 当前关卡必须已加载；恢复初始状态，不重新生成或搜索，不改变关卡配置。 */
 void restartGame(void);

@@ -117,7 +117,7 @@ int main(void)
     int seed, count, status;
     puts("WAREHOUSE DELIVERY - RBE104TC prototype");
     puts("Type one command and press Enter. Lowercase is also accepted.");
-    count = readNumber("Forklifts (1-4; try 1 first): ", 1, MAX_FORKLIFTS, 0);
+    count = readNumber("Forklifts (1-5; try 1 first): ", 1, MAX_FORKLIFTS, 0);
     if (count < 0) {
         puts("Input ended. Goodbye.");
         return 0;

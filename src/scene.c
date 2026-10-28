@@ -94,8 +94,35 @@ static void text(int x, int y, const char *content, int scale, uint32_t color)
     }
 }
 
-/* 12×12 图标：'1'..'5' 索引调色板，'.' 跳过绘制以保留背景。 */
-static const char *bot[12] = {
+/* 菜单与游戏共用同一块像素缓冲区。菜单画布固定 1280×720；游戏开始后
+ * drawScene() 会按地图重新设置画布，窗口据此重建纹理。 */
+void menuCanvas(const uint32_t *background)
+{
+    int i;
+    sceneWidth = 1280;
+    sceneHeight = 720;
+    offsetX = offsetY = 0;
+    if (background) {
+        /* 背景已转成 0x00RRGGBB，可直接整块复制。 */
+        memcpy(pixels, background, 1280 * 720 * sizeof *pixels);
+    } else {
+        for (i = 0; i < 1280 * 720; i++) {
+            pixels[i] = 0x170D29;
+        }
+    }
+}
+
+void menuRect(int x, int y, int width, int height, uint32_t color)
+{
+    rect(x, y, width, height, color);
+}
+
+void menuText(int x, int y, const char *content, int scale, uint32_t color)
+{
+    text(x, y, content, scale, color);
+}
+
+/* 12×12 图标：'1'..'5' 索引调色板，'.' 跳过绘制以保留背景。 */static const char *bot[12] = {
     ".....22.....",
     ".....12.....",
     "...111111...",
@@ -346,59 +373,26 @@ void drawScene(unsigned int seed, int paused)
         text(x + 11, 709, keys[itemIndex], 2, purpleColor);
         text(x + 45, 713, labels[itemIndex], 1, mutedColor);
     }
-    text(575, 709, "SPACE PAUSE  R RESTART  N NEXT  Q QUIT", 1, mutedColor);
+    text(575, 709, "SPACE PAUSE  R RESTART  N NEXT  M MENU  Q QUIT", 1, mutedColor);
+    text(575, 729, "ESC MENU  F11 FULLSCREEN", 1, mutedColor);
     text(40, 766, message, 1, purpleColor);
     text(1090 + extraWidth, 766, "RBE104TC / C", 1, mutedColor);
-    /* 最后覆盖状态提示；生命耗尽优先于全部送达。 */
-    if (paused || getGameStatus() != GAME_PLAYING) {
+    /* 最后覆盖暂停或失败提示；获胜画面由 drawVictoryCelebration() 绘制。 */
+    if (paused || getGameStatus() == GAME_LOST) {
         offsetX = extraWidth / 2;
         offsetY = extraHeight / 2;
         panel(216, 362, 484, 118);
         if (paused) {
             statusTitle = "SHIFT PAUSED";
             statusHint = "SPACE TO CONTINUE";
-        } else if (getGameStatus() == GAME_LOST) {
+        } else {
             statusTitle = "SHIFT ENDED";
             statusHint = "PRESS R TO START AGAIN";
-        } else {
-            statusTitle = "ALL DELIVERED";
-            statusHint = "N NEXT LEVEL / R RESTART";
         }
         text(246, 390, statusTitle, 3, whiteColor);
         text(246, 442, statusHint, 1, purpleColor);
     }
     offsetX = offsetY = 0;
-}
-
-void drawSetup(const char *seed, int count, int field, const char *error)
-{
-    /* 设置页固定使用初始画布。输入内容由 window.c 保存，这里只负责显示；
-     * 空字段显示横线，错误提示由 Enter 校验分支提供。 */
-    char buffer[32];
-    sceneWidth = 1280;
-    sceneHeight = 800;
-    offsetX = offsetY = 0;
-    rect(0, 0, sceneWidth, sceneHeight, backgroundColor);
-    text(352, 100, "PARCEL SHIFT", 8, whiteColor);
-    text(424, 186, "CHOOSE YOUR DELIVERY RUN", 3, mutedColor);
-    panel(300, 250, 680, 330);
-    text(340, 284, "SEED / LEVEL   1-99999", 2, mutedColor);
-    rect(328, 320, 624, 64, field == 0 ? lineColor : backgroundColor);
-    text(352, 336, seed[0] ? seed : "-", 4, field == 0 ? purpleColor : whiteColor);
-    text(340, 414, "FORKLIFTS   1-4", 2, mutedColor);
-    rect(328, 450, 624, 64, field == 1 ? lineColor : backgroundColor);
-    if (count > 0) {
-        snprintf(buffer, sizeof buffer, "%d", count);
-    } else {
-        snprintf(buffer, sizeof buffer, "-");
-    }
-    text(352, 466, buffer, 4, field == 1 ? purpleColor : whiteColor);
-    text(412, 478, "LEFT / RIGHT OR TYPE 1-4", 2, mutedColor);
-    text(340, 544, "ONE PLAYER ROBOT - AVOID THE FORKLIFTS", 1, mutedColor);
-    text(340, 610, "TAB / UP / DOWN: SELECT FIELD", 2, mutedColor);
-    text(340, 648, "SEED: TYPE DIGITS / BACKSPACE / DELETE", 2, mutedColor);
-    text(340, 694, "ENTER: START    ESC: QUIT", 3, purpleColor);
-    text(340, 754, error, 2, 0xFFAB9C);
 }
 
 void drawCollisionNotice(void)
@@ -410,6 +404,152 @@ void drawCollisionNotice(void)
     text(400, 392, "-1 LIFE", 3, whiteColor);
     text(400, 435, lives > 0 ? "IF CARRYING: PACKAGE DROPPED" : "NO LIVES LEFT", 2, purpleColor);
     text(400, 465, "CONTINUING IN 1.5 SECONDS", 1, mutedColor);
+    offsetX = offsetY = 0;
+}
+
+/* 用矩形积木画抱箱机器人。坐标以 6 像素为单位，表内顺序就是绘制顺序：
+ * 先头身和面部，再箱子与手臂，最后眼睛。程序内绘制，不加载外部图片。 */
+static void celebrationBot(int x, int y, int wink)
+{
+    typedef struct {
+        int x, y, w, h;
+        uint32_t color;
+    } Part;
+    static const Part parts[] = {
+        {15, 0, 2, 5, 0x8060B5},   {14, 0, 4, 2, 0xBBFFE6},   {7, 4, 20, 15, 0x493261},
+        {8, 4, 18, 2, 0xF0DFFF},   {7, 6, 20, 11, 0xBA91EC},   {8, 17, 18, 2, 0x8762B5},
+        {4, 8, 3, 8, 0x50376F},    {4, 9, 2, 6, 0x8CEBD7},    {27, 8, 3, 8, 0x50376F},
+        {28, 9, 2, 6, 0x8CEBD7},   {9, 7, 16, 10, 0x21172F},  {10, 7, 14, 1, 0x59436E},
+        {11, 10, 3, 3, 0xB2FFE8},  {11, 10, 1, 1, 0xF0FFF9},  {15, 14, 5, 1, 0xE5A4F2},
+        {16, 15, 3, 1, 0xE5A4F2},  {10, 15, 2, 1, 0x9D6BBA},  {22, 15, 2, 1, 0x9D6BBA},
+        {9, 19, 16, 8, 0x8C64BC},  {11, 20, 12, 6, 0xD2B4F4}, {9, 26, 5, 5, 0xB59BD7},
+        {20, 26, 5, 5, 0xB59BD7},  {8, 30, 7, 2, 0x47335F},   {19, 30, 7, 2, 0x47335F},
+        {9, 30, 5, 1, 0xA8F4DB},   {20, 30, 5, 1, 0xA8F4DB},  {7, 18, 20, 11, 0x82512F},
+        {8, 18, 18, 2, 0xFFE39A},  {8, 20, 18, 8, 0xE4A64D},  {9, 21, 16, 6, 0xF5BC62},
+        {15, 18, 4, 3, 0xC4894C},  {16, 21, 2, 5, 0xD0924B},  {23, 24, 2, 3, 0xAC743E},
+        {22, 25, 4, 1, 0xAC743E},  {5, 20, 4, 5, 0x4E356B},   {5, 20, 3, 4, 0xD9BCF6},
+        {25, 20, 4, 5, 0x4E356B},  {26, 20, 3, 4, 0xD9BCF6}};
+    size_t i;
+    for (i = 0; i < sizeof parts / sizeof parts[0]; i++) {
+        rect(x + parts[i].x * 6, y + parts[i].y * 6, parts[i].w * 6, parts[i].h * 6,
+             parts[i].color);
+    }
+    if (wink) {
+        /* 跳跃时眨眼：把眼睛画成弧形亮线，落地后恢复完整眼睛。 */
+        rect(x + 21 * 6, y + 10 * 6, 2 * 6, 6, 0xB2FFE8);
+        rect(x + 20 * 6, y + 11 * 6, 2 * 6, 6, 0xB2FFE8);
+        rect(x + 21 * 6, y + 12 * 6, 2 * 6, 6, 0xB2FFE8);
+    } else {
+        rect(x + 21 * 6, y + 10 * 6, 3 * 6, 3 * 6, 0xB2FFE8);
+    }
+}
+
+/* 按比例压暗单个颜色；烟花余烬和尾迹逐级变暗时使用，不做整屏混合。 */
+static uint32_t fadeColor(uint32_t color, int amount)
+{
+    return (((color >> 16) & 255) * amount / 255 << 16) |
+           (((color >> 8) & 255) * amount / 255 << 8) | ((color & 255) * amount / 255);
+}
+
+/* 一组烟花的循环动画。delay 让三组先后出现；elapsed 取模使动画无限循环，
+ * 不调用游戏的随机数，因此庆祝不会改变下一回合的叉车行为。 */
+static void firework(int x, int y, uint32_t elapsed, uint32_t delay, uint32_t color)
+{
+    /* 16 个固定方向用千分比整数表示，避免浮点运算和平台差异。 */
+    static const int dx[16] = {1000, 924, 707, 383, 0, -383, -707, -924,
+                               -1000, -924, -707, -383, 0, 383, 707, 924};
+    static const int dy[16] = {0, 383, 707, 924, 1000, 924, 707, 383,
+                               0, -383, -707, -924, -1000, -924, -707, -383};
+    int age, i, j;
+    if (elapsed < delay) {
+        return;
+    }
+    age = (int)((elapsed - delay) % 2100);
+    if (age < 260) {
+        /* 升空阶段：火点从低处升到爆点，并带一小段尾迹。 */
+        int rise = 90 - age * 90 / 260;
+        rect(x, y + rise, 4, 9, color);
+        rect(x + 1, y + rise + 12, 2, 8, fadeColor(color, 120));
+        return;
+    }
+    age -= 260;
+    if (age > 1100) {
+        return;
+    }
+    /* 爆开阶段：不同方向速度略有差别，t*t 近似重力下坠；
+     * 同一方向画三层，越旧越暗越大，形成尾迹。 */
+    for (i = 0; i < 16; i++) {
+        for (j = 2; j >= 0; j--) {
+            int t = age - j * 35, radius, fall, size;
+            if (t < 0) {
+                continue;
+            }
+            radius = t * (i % 2 ? 88 : 110) / 1000;
+            fall = t * t / 18000;
+            size = j ? 3 : 5;
+            rect(x + dx[i] * radius / 1000, y + dy[i] * radius / 1000 + fall, size, size,
+                 fadeColor(color, (255 - age * 180 / 1100) / (j + 1)));
+        }
+    }
+}
+
+void drawVictoryCelebration(uint32_t elapsed)
+{
+    int i, phase = (int)(elapsed % 1600), lift = 0, shadow;
+    char stats[80];
+    /* 只有共享核心确认获胜时才覆盖画面；重开或失败后调用本函数不绘制。 */
+    if (getGameStatus() != GAME_WON) {
+        return;
+    }
+    offsetX = offsetY = 0;
+    /* 保留压暗的地图作为背景，庆祝卡片按当前画布居中，兼容所有地图尺寸。 */
+    for (i = 0; i < sceneWidth * sceneHeight; i++) {
+        pixels[i] = (pixels[i] & 0xFCFCFC) >> 2;
+    }
+    offsetX = (sceneWidth - 880) / 2;
+    offsetY = (sceneHeight - 600) / 2;
+    rect(0, 0, 880, 600, 0x9971CB);
+    rect(3, 3, 874, 594, 0x1B112D);
+    rect(20, 20, 840, 4, 0x39274F);
+    text(356, 38, "SHIFT COMPLETE", 2, 0xBBA3D5);
+    text(284, 72, "ALL DELIVERED", 4, 0xF5E8FF);
+    snprintf(stats, sizeof stats, "LEVEL %05u / SCORE %d / LIVES %d", currentLevel.number, score,
+             lives);
+    text((880 - (int)strlen(stats) * 12) / 2, 117, stats, 2, 0xA7EBD3);
+    /* 背景星点缓慢闪烁；相位只用 elapsed，与游戏回合无关。 */
+    for (i = 0; i < 22; i++) {
+        int starX = 45 + (i * 137) % 790;
+        int starY = 160 + (i * 61) % 290;
+        rect(starX, starY, 2, 2,
+             ((elapsed / 240 + (uint32_t)i) % 5 == 0) ? 0xBDA0E2 : 0x513965);
+    }
+    firework(177, 250, elapsed, 0, 0xC89BFF);
+    firework(705, 226, elapsed, 400, 0xFFD484);
+    firework(440, 202, elapsed, 900, 0x8DE8D1);
+    rect(224, 478, 432, 2, 0x4B315F);
+    /* 整数抛物线：phase 在 0..1050 间往返，中点达到最高跳跃高度。 */
+    if (phase < 1050) {
+        lift = 4 * 86 * phase * (1050 - phase) / (1050 * 1050);
+    }
+    shadow = 142 - lift / 2;
+    rect(440 - shadow / 2, 465, shadow, 8, 0x100B1B);
+    rect(440 - shadow / 2 + 12, 473, shadow - 24, 3, 0x2E1D3F);
+    celebrationBot(338, 274 - lift, phase < 1050);
+    /* 落地瞬间的尘土只持续 120ms；不做整屏闪光，避免遮住结算文字。 */
+    if (phase >= 1050 && phase < 1170) {
+        int dust = (phase - 1050) / 6;
+        rect(340 - dust, 458 - dust / 3, 6, 4, 0xB18BCC);
+        rect(536 + dust, 458 - dust / 3, 6, 4, 0xB18BCC);
+    }
+    text(272, 497, "EVERY PARCEL HOME. NICE WORK.", 2, 0xD1B6EB);
+    /* 三个操作入口与 window.c 的鼠标命中区域使用同一组坐标。 */
+    panel(64, 539, 240, 38);
+    panel(320, 539, 240, 38);
+    panel(576, 539, 240, 38);
+    text(88, 551, currentLevel.number < 99999 ? "N  NEXT DELIVERY" : "FINAL LEVEL CLEAR", 2,
+         0xC6A0FF);
+    text(356, 551, "R  PLAY AGAIN", 2, 0xE6D6FA);
+    text(618, 551, "M  MAIN MENU", 2, 0xE6D6FA);
     offsetX = offsetY = 0;
 }
 

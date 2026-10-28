@@ -126,7 +126,7 @@ int initialise(int count, unsigned int levelNumber)
     GameSnapshot previous;
     char previousSolution[MAX_SOLUTION + 1];
     char selectedSolution[MAX_SOLUTION + 1];
-    int attempt, i, checkedCount, accepted;
+    int attempt, i, checkedCount, checkedLimit, accepted;
     int previousCount = forkCount;
     int previousTotal = totalPackages;
     int rows, cols;
@@ -137,6 +137,9 @@ int initialise(int count, unsigned int levelNumber)
      * 无效配置在保存前直接返回，不触碰现有状态。 */
     captureGame(&previous);
     memcpy(previousSolution, levelSolution, sizeof previousSolution);
+    /* 1..4 仍验收原四种配置，不能因为新增第五辆而改变旧关卡的地图。
+     * 只有玩家明确选择 5 辆时才额外验收第五种配置。 */
+    checkedLimit = count == 5 ? 5 : 4;
     for (attempt = 0; attempt <= LEVEL_ATTEMPTS; attempt++) {
         if (!generateLevel(&candidate, levelNumber, attempt) ||
             !validateLevel(&candidate, NULL, 0)) {
@@ -144,9 +147,7 @@ int initialise(int count, unsigned int levelNumber)
         }
         currentLevel = candidate;
         accepted = 1;
-        /* 所有数量都验证，不能只验证 count：否则同一编号可能随叉车数
-         * 选择不同重试候选，破坏“关卡号唯一决定地图”的约定。 */
-        for (checkedCount = 1; checkedCount <= MAX_FORKLIFTS; checkedCount++) {
+        for (checkedCount = 1; checkedCount <= checkedLimit; checkedCount++) {
             forkCount = checkedCount;
             restartGame();
             if (!findWinningRoute(levelSolution)) {

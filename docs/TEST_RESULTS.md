@@ -1,5 +1,79 @@
 # 测试记录
 
+## 2026-10-28 合并第五叉车、开始菜单与胜利庆祝（版本 7）
+
+合并基准：`game/` 的 Git HEAD `6a0705c`，开始时工作区干净。同学包为 `ParcelShift_Celebration/Source`（版本 7）。以当前项目为基准，没有覆盖整个 `Source`，未提交、未推送。
+
+### 冲突判断与合并方式
+
+- 共享规则：同学包的 `game.c`/`level.c`/`solver.c`/`audio.c` 基于当前项目展开注释前的较早版本，且缺少当前项目的碰撞掉包裹、回血概率修正、可变尺寸和求解去重细节。保留当前核心，只移植第五叉车：`MAX_FORKLIFTS=5`、生成器从同一洗牌结果取第 5 个出生点、`initialise()` 在 1–4 时仍验收原四种配置、选 5 时额外验收第五种；终端提示改为 1–5。
+- 开始页与菜单：当前设置页由同学完整菜单替代。旧 `drawSetup()`、`tests/test_window.c` 删除，原覆盖迁移到新的菜单、窗口流程与胜利流程测试，没有降低规则覆盖。
+- 窗口流程：保留当前碰撞提示、音效触发、纹理重建和缩放实现；移植菜单、后台验证、M/Esc 返回菜单、F11、胜利计时与卡片点击。保留窗口化启动和当前展开式手写风格，不照搬同学的默认全屏与压缩写法。
+- 音频与素材：保留当前 `audio.c`，替换为 124 BPM 背景音乐与对应生成脚本，新增菜单背景 BMP/PNG。
+- 测试：保留现有规则、掉包、回血、巡逻、结构校验、尺寸边界和 `--audit`/`--route`，新增第五叉车、菜单、庆祝、窗口流程和胜利流程覆盖。
+
+### 构建与自动测试
+
+环境：Windows、MinGW GCC 8.1.0（x86_64-posix-seh-rev0）、SDL2 2.32.10、Python 3.14.6。命令从 `game/` 执行，全部使用 C11 `-Wall -Wextra -Wpedantic -Werror`。
+
+| 命令 | 结果 | 耗时 |
+| --- | --- | --- |
+| `cmd /c "scripts\build_basic.bat basic <nul"` | 通过；`test_game.exe` 全部 PASS，含六关卡 5 叉车验收/回放与 1-4 地图不变；`test_celebration.exe` PASS；重新生成 preview/delivered PPM | 7.61s |
+| `cmd /c "scripts\build_basic.bat gui <nul"` | 通过；链接 `menu.c`，复制 `menu_background.bmp` 与六个 WAV，更新 GUI EXE | 1.4s |
+| `cmd /c "scripts\build_basic.bat audio <nul"` | 通过：六 WAV 格式、五种音效输出、BGM 循环边界、并发混音与清理 | 0.67s |
+| `cmd /c "scripts\build_basic.bat window-test <nul"` | 通过：`test_menu`、`test_window_flow`、`test_victory_flow` 全 PASS，生成 `menu_preview.ppm` | 12.36s |
+| `python tests\test_terminal.py -v` | 8/8 OK：暂停/重开/胜负、1–5 叉车、5 叉车通关、999→1000、99999、回血、输入校验、尺寸与包裹数 | 3.37s |
+| `.\build\windows\test_game.exe --audit 250` | 250 行、无失败标记；输出存 `build/windows/audit_tests_final.txt` | 39.37s |
+
+`--audit` 沿用原设计只抽 1–4 辆配置；5 辆的验收与回放由 `test_game`、`test_menu`、`test_terminal.py` 覆盖。
+
+文档更新后，Lead 在最终工作区复跑同一组命令，全部通过：basic 7.05s、audio 0.67s、window-test 12.57s、`tests/test_terminal.py` 3.72s（8/8 OK）。
+
+### 1–4 辆叉车地图不变的实证
+
+在临时目录用 `git archive HEAD` 取出合并前源码，分别构建只输出 `generateLevel()`/`validateLevel()` 结果的对比程序（未加入源码），对全部 99999 个关卡的前 4 个内部 seed 比较地图内容、前四个出生点、尺寸、生成 seed 和结构检查结果。两份输出均为 399996 行，SHA-256 同为 `7316D48EE4C053FCB5427D40CA588FB5BBFFA78763E5304465F730D3B58B7491`，逐字节一致。说明第五出生点没有改变 1–4 的地图，也没有让原本通过结构检查的候选被新检查拒绝。对比程序与输出保存在 `build/merge-check/`（`build/` 已忽略）。
+
+### 五叉车回放
+
+终端用本次构建的验收路线逐关卡回放（方向键逐字符输入）：
+
+| 关卡 | 叉车 | 回合 | 得分 | 结果 |
+| --- | --- | --- | --- | --- |
+| 1 | 5 | 50 | 300 | YOU WIN |
+| 1000 | 5 | 138 | 400 | YOU WIN |
+| 10000 | 5 | 126 | 400 | YOU WIN |
+| 30000 | 5 | 178 | 500 | YOU WIN |
+| 60000 | 5 | 254 | 500 | YOU WIN |
+| 99999 | 5 | 236 | 500 | YOU WIN；N 提示 Last level number，不进入 100000 |
+
+`test_menu.c` 对同一组关卡再次用 5 叉车回放并通过；`test_terminal.py` 的 5 叉车用例覆盖暂停、重开、换关和最后关卡。
+
+### 真实 SDL 窗口检查（非 dummy）
+
+环境：Windows 桌面 2560×1440、显示缩放 150%、SDL2 2.32.10。启动 `build/windows/parcel_shift.exe`，用系统截图、`mouse_event` 鼠标点击和向窗口投递 `WM_KEYDOWN/WM_KEYUP` 的按键进行交互。截图保存在 `build/windows/desktop-check/`。
+
+- 首次启动发现 1280×720 窗口被系统放大到约 1920×1080 并部分移出屏幕，原因是进程未声明 DPI 感知。已在 `SDL_Init` 前设置 `SDL_HINT_WINDOWS_DPI_AWARENESS="permonitorv2"`，重建后窗口客户区为 1280×720，菜单完整可见（`d0_menu.png`）。
+- 菜单：背景、标题、难度预设、关卡号 1、机器人 2、档位 1 正常显示；`parcel_shift.exe 99999 2` 预填后显示档位 5、17×31、5 个包裹（`e0_menu_99999.png`）。
+- 鼠标：点击 START 进入游戏；点击 RESUME 恢复当前局；庆祝卡片上 R 重开、N 下一关、M 主菜单均生效；菜单 EXIT 退出进程。
+- 键盘：D 前进一格（`d2_move.png` TURNS 001）、空格暂停/继续（`d3_pause.png` SHIFT PAUSED）、R 重开（TURNS 000）、M/ESC 返回菜单、F11 进入/退出全屏（`d9_fullscreen.png`、`d10_windowed.png`）、Q 退出。
+- 菜单期间状态冻结：M 返回菜单后菜单画布为 1280×720，RESUME 后回到同一回合数的游戏画面（`d5_menu_resume.png`、`d6_resume.png`；虚拟流程测试另做逐字段快照比较）。
+- 缩放：用 `MoveWindow` 把窗口改小再恢复，画面等比缩放显示（`d7_resized.png`、`d8_restored.png`）；未测试鼠标拖拽边框。
+- 胜利：第 1 关、2 辆叉车按 42 步验收路线通关，显示 SHIFT COMPLETE / ALL DELIVERED / SCORE 300 / LIVES 3 与三个按钮（`d11_win.png`）；点击 R 后回到 TURNS 000（`d12_click_restart.png`）；点击 N 进入第 2 关（`f1_next_level.png`）。
+- 最后关卡：第 99999 关、2 辆叉车按 230 步路线通关，卡片显示 FINAL LEVEL CLEAR，无 NEXT；按 N 后仍停留在庆祝画面（`e2_final_win.png`、`e3_after_n.png`）；M 返回菜单后 RESUME 可用，EXIT 退出（`e4_menu_from_win.png`）。
+- 本次自动注入键盘使用窗口消息，`keybd_event` 注入未被 SDL 接收；因此以上键盘结果证明窗口事件处理与共享规则，不等同于物理键盘、输入法或桌面焦点的人工验收。
+
+### 未验证项
+
+- 真实桌面物理键盘在菜单种子框输入数字（`SDL_TEXTINPUT`）、Tab/Shift+Tab 切换、鼠标拖拽边框缩放、悬停效果。
+- 真实窗口中的失败/碰撞提示显示、5 辆叉车的实际窗口试玩、小屏幕工作区缩小分支。
+- 实际音频听感（菜单背景音乐、五种音效、胜利音效只播一次、暂停/重开清音效）；离线音频测试只验证数据。
+- Linux、ASan/UBSan、课程指定环境；99999 个关卡的 5 叉车全量搜索。
+- dummy 驱动测试覆盖事件与状态，不能替代上述桌面项目。
+
+### 工作区
+
+未提交、未推送。源码、测试、素材和文档修改保留在 `game/` 工作区；`build/` 与 `deps/` 仍由 `.gitignore` 排除。真实窗口截图和临时对比程序位于 `build/` 下，不属于源码交付。仓库根目录另放有窗口版 `parcel_shift.exe`、`SDL2.dll` 和 `SDL2-LICENSE.txt` 作为可直接运行副本（连同仓库的 `assets/`）；使用 dummy 驱动从根目录启动 3 秒无菜单背景或音频缺失报错。这些二进制未提交，重新编译后需手动复制更新。
+
 ## 2026-10-28 仓库交接与相对路径
 
 - README 命令从仓库根目录执行；SDL 默认目录改为 `deps/SDL2/`，仍允许 `SDL2_ROOT` 覆盖，相对配置以仓库根目录解析。构建从 SDL2 目录或其上级复制许可证；`deps/` 与 `build/` 不纳入 Git。

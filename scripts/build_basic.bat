@@ -22,8 +22,12 @@ gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -Isrc src\level.c src\solver.c src
 if errorlevel 1 goto failed
 gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -Isrc src\level.c src\solver.c src\game.c src\scene.c tests\test_game.c -o build\windows\test_game.exe
 if errorlevel 1 goto failed
+gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -Isrc src\level.c src\solver.c src\game.c src\scene.c tests\test_celebration.c -o build\windows\test_celebration.exe
+if errorlevel 1 goto failed
 cd /d "build\windows"
 test_game.exe
+if errorlevel 1 goto failed
+test_celebration.exe
 if errorlevel 1 goto failed
 preview.exe
 if errorlevel 1 goto failed
@@ -52,6 +56,8 @@ if not exist "build\windows\assets" mkdir "build\windows\assets"
 if errorlevel 1 goto failed
 copy /y "assets\*.wav" "build\windows\assets\" >nul
 if errorlevel 1 goto failed
+copy /y "assets\menu_background.bmp" "build\windows\assets\" >nul
+if errorlevel 1 goto failed
 if "%~1"=="audio" goto audio
 if "%~1"=="window-test" goto windowtest
 where windres >nul 2>nul
@@ -61,9 +67,9 @@ if errorlevel 1 (
 )
 windres game_icon.rc -o build\windows\game_icon.o
 if errorlevel 1 goto failed
-gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -I"%SDL2_ROOT%\include\SDL2" src\level.c src\solver.c src\game.c src\scene.c src\audio.c src\window.c build\windows\game_icon.o -L"%SDL2_ROOT%\lib" -static-libgcc -lmingw32 -lSDL2main -lSDL2 -mwindows -o build\windows\parcel_shift.exe
+gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -I"%SDL2_ROOT%\include\SDL2" src\level.c src\solver.c src\game.c src\scene.c src\audio.c src\menu.c src\window.c build\windows\game_icon.o -L"%SDL2_ROOT%\lib" -static-libgcc -lmingw32 -lSDL2main -lSDL2 -mwindows -o build\windows\parcel_shift.exe
 if errorlevel 1 goto failed
-echo Built successfully. Run build\windows\parcel_shift.exe and fill in the start screen.
+echo Built successfully. Run build\windows\parcel_shift.exe and choose a run in the menu.
 goto done
 :audio
 gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -DSDL_MAIN_HANDLED -I"%SDL2_ROOT%\include\SDL2" tests\test_audio.c -L"%SDL2_ROOT%\lib" -lSDL2 -o build\windows\test_audio.exe
@@ -73,10 +79,18 @@ test_audio.exe
 if errorlevel 1 goto failed
 goto done
 :windowtest
-gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -Isrc -I"%SDL2_ROOT%\include\SDL2" src\level.c src\solver.c src\game.c src\scene.c src\audio.c tests\test_window.c -L"%SDL2_ROOT%\lib" -lSDL2 -o build\windows\test_window.exe
+gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -DSDL_MAIN_HANDLED -Isrc -I"%SDL2_ROOT%\include\SDL2" src\level.c src\solver.c src\game.c src\scene.c src\menu.c tests\test_menu.c -L"%SDL2_ROOT%\lib" -lSDL2 -o build\windows\test_menu.exe
+if errorlevel 1 goto failed
+gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -DSDL_MAIN_HANDLED -Isrc -I"%SDL2_ROOT%\include\SDL2" src\level.c src\solver.c src\game.c src\scene.c src\menu.c src\audio.c tests\test_window_flow.c -L"%SDL2_ROOT%\lib" -lSDL2 -o build\windows\test_window_flow.exe
+if errorlevel 1 goto failed
+gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -DSDL_MAIN_HANDLED -Isrc -I"%SDL2_ROOT%\include\SDL2" src\level.c src\solver.c src\game.c src\scene.c src\menu.c src\audio.c tests\test_victory_flow.c -L"%SDL2_ROOT%\lib" -lSDL2 -o build\windows\test_victory_flow.exe
 if errorlevel 1 goto failed
 cd /d "build\windows"
-test_window.exe
+test_menu.exe
+if errorlevel 1 goto failed
+test_window_flow.exe
+if errorlevel 1 goto failed
+test_victory_flow.exe
 if errorlevel 1 goto failed
 :done
 pause

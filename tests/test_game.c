@@ -467,7 +467,7 @@ static void testLevels(void)
     assert(currentLevel.number == 43 && turns == 0);
     captureGame(&before);
     original = currentLevel;
-    assert(!initialise(0, 42) && !initialise(5, 42) && !initialise(1, 0) && !initialise(1, 100000));
+    assert(!initialise(0, 42) && !initialise(6, 42) && !initialise(1, 0) && !initialise(1, 100000));
     captureGame(&after);
     assert(memcmp(&before, &after, sizeof before) == 0 &&
            memcmp(&original, &currentLevel, sizeof original) == 0);
@@ -479,6 +479,54 @@ static void testLevels(void)
     assert(savePreview("large.ppm"));
     puts(
         "PASS: remaining traffic counts, next level, final level and invalid configuration preservation.");
+}
+
+/* 第五辆叉车是新增验收配置：只有玩家明确选择 5 辆时才额外检查第 5 种
+ * 获胜路线，因此 1..4 辆仍选到与旧版相同的候选地图。 */
+static void testFiveForklifts(void)
+{
+    const unsigned int numbers[] = {1, 1000, 10000, 30000, 60000, 99999};
+    size_t i;
+    Level five, one, four;
+    GameSnapshot before, after;
+    char solution[MAX_SOLUTION + 1];
+    for (i = 0; i < sizeof numbers / sizeof numbers[0]; i++) {
+        assert(initialise(5, numbers[i]));
+        assert(forkCount == 5 && turns == 0 && lives == MAX_LIVES);
+        assert(validateLevel(&currentLevel, NULL, 0));
+        five = currentLevel;
+        strcpy(solution, levelSolution);
+        replay();
+        processCommand('r');
+        assert(turns == 0 && lives == MAX_LIVES && forkCount == 5 && !score && !delivered);
+        /* 相同配置重复初始化必须复现同一地图和路线：搜索过程不能消耗
+         * 生成器的随机序列，否则同一关每次进入都可能换地图。 */
+        captureGame(&before);
+        assert(initialise(5, numbers[i]));
+        assert(memcmp(&five, &currentLevel, sizeof five) == 0);
+        assert(strcmp(solution, levelSolution) == 0);
+        captureGame(&after);
+        assert(memcmp(&before, &after, sizeof before) == 0);
+        /* 第五辆是新增配置，不能反向改变旧版 1 辆和 4 辆的地图选择。 */
+        assert(initialise(1, numbers[i]));
+        one = currentLevel;
+        assert(initialise(4, numbers[i]));
+        four = currentLevel;
+        assert(memcmp(&one, &four, sizeof one) == 0);
+        printf("PASS: five forklifts, level %u, %dx%d, route replay and repeatable map.\n",
+               numbers[i], mapRows, mapCols);
+    }
+    /* 无效数量在保存旧局之前返回，不改变关卡、局内状态或旧路线。 */
+    assert(initialise(2, 42));
+    captureGame(&before);
+    one = currentLevel;
+    strcpy(solution, levelSolution);
+    assert(!initialise(0, 42) && !initialise(6, 42));
+    captureGame(&after);
+    assert(memcmp(&before, &after, sizeof before) == 0);
+    assert(memcmp(&one, &currentLevel, sizeof one) == 0);
+    assert(strcmp(solution, levelSolution) == 0);
+    puts("PASS: fifth forklift acceptance, repeatable maps, unchanged old maps and invalid counts.");
 }
 
 int main(int argc, char **argv)
@@ -528,6 +576,7 @@ int main(int argc, char **argv)
     testTraffic();
     testValidation();
     testLevels();
+    testFiveForklifts();
     assert(initialise(2, 42));
     replay();
     drawScene(42, paused);

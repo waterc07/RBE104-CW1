@@ -6,11 +6,11 @@
 /* 数组容量覆盖最大关卡；实际遍历边界使用 Level.rows/cols。 */
 #define MAX_ROWS 17
 #define MAX_COLS 31
-#define MAX_FORKLIFTS 4
+#define MAX_FORKLIFTS 5
 /* 首次候选不计入重试次数，因此最多检查 101 张候选地图。 */
 #define LEVEL_ATTEMPTS 100
 #define MAX_SOLUTION 4096
-#define LEVEL_GENERATOR_VERSION 6
+#define LEVEL_GENERATOR_VERSION 7
 #define DEFAULT_LEVEL 1U
 
 /* 零起始行列坐标：row 向下增加，col 向右增加。 */
@@ -23,6 +23,8 @@ typedef struct {
     int rows, cols;
     /* 每个有效行在 cells[row][cols] 放置字符串终止符。 */
     char cells[MAX_ROWS][MAX_COLS + 1];
+    /* 前四个出生点沿用旧版洗牌结果，第五个取紧随其后的位置；
+     * 因此选择 1-4 辆叉车时地图与版本 6 相同。 */
     Position start, forkStarts[MAX_FORKLIFTS];
     unsigned int number;     /* 用户输入的关卡号，也是叉车初始 seed。 */
     uint32_t generationSeed; /* 本次候选的内部 seed，不用于选择尺寸。 */

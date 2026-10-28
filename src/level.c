@@ -101,7 +101,7 @@ int validateLevel(const Level *level, char *error, int errorSize)
     if (r < 1 || r >= rows - 1 || c < 1 || c >= cols - 1 || level->cells[r][c] != 'D') {
         return fail(error, errorSize, "Invalid robot start.");
     }
-    /* 四个候选出生点都须合法，使地图不依赖玩家选择的叉车数量。
+    /* 五个候选出生点都须合法，使地图不依赖玩家选择的叉车数量。
      * 叉车只能出生在空地，因此也排除了包裹和配送点重叠。 */
     for (i = 0; i < MAX_FORKLIFTS; i++) {
         r = level->forkStarts[i].row;
@@ -190,7 +190,7 @@ int generateLevel(Level *level, unsigned int number, int attempt)
         }
     }
     /* (1,1) 到 (r,c) 的曼哈顿距离为 r+c-2；阈值 7 留出至少五步距离。
-     * choices 的前几项分别用于包裹和四个出生点，避免重叠。 */
+     * choices 的前几项分别用于包裹和五个出生点，避免重叠。 */
     for (r = 1; r < level->rows - 1; r++) {
         for (c = 1; c < level->cols - 1; c++) {
             if (level->cells[r][c] == ' ' && r + c >= 7) {
@@ -212,6 +212,8 @@ int generateLevel(Level *level, unsigned int number, int attempt)
     for (i = 0; i < packages; i++) {
         level->cells[choices[i].row][choices[i].col] = 'P';
     }
+    /* 只从前四项之后继续取用同一份洗牌结果，不额外消耗随机数。
+     * 这样前四辆叉车的出生点与版本 6 完全一致，第五辆才使用下一项。 */
     for (i = 0; i < MAX_FORKLIFTS; i++) {
         level->forkStarts[i] = choices[i + packages];
     }
