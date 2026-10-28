@@ -30,7 +30,7 @@ if errorlevel 1 goto failed
 echo Built successfully. Run build\windows\terminal.exe from the game folder to play.
 goto done
 :gui
-if not defined SDL2_ROOT set "SDL2_ROOT=D:\Coding\env\SDL2\SDL2-2.32.10\x86_64-w64-mingw32"
+if not defined SDL2_ROOT set "SDL2_ROOT=deps\SDL2"
 if not exist "%SDL2_ROOT%\include\SDL2\SDL.h" (
   echo SDL2 headers missing. Set SDL2_ROOT to the matching MinGW SDL2 directory.
   goto failed
@@ -41,7 +41,10 @@ if not exist "%SDL2_ROOT%\bin\SDL2.dll" (
 )
 copy /y "%SDL2_ROOT%\bin\SDL2.dll" "build\windows\SDL2.dll" >nul
 if errorlevel 1 goto failed
-if exist "%SDL2_ROOT%\..\LICENSE.txt" (
+if exist "%SDL2_ROOT%\LICENSE.txt" (
+  copy /y "%SDL2_ROOT%\LICENSE.txt" "build\windows\SDL2-LICENSE.txt" >nul
+  if errorlevel 1 goto failed
+) else if exist "%SDL2_ROOT%\..\LICENSE.txt" (
   copy /y "%SDL2_ROOT%\..\LICENSE.txt" "build\windows\SDL2-LICENSE.txt" >nul
   if errorlevel 1 goto failed
 )

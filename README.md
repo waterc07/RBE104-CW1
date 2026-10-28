@@ -8,10 +8,9 @@ RBE104TC 仓库配送游戏，提供终端版和 SDL2 像素窗口版。机器�
 
 ## 编译与运行
 
-以下命令在 Windows PowerShell 中执行，需要 GCC 在 `PATH` 中。
+以下命令从仓库根目录（包含本 README 的目录）在 Windows PowerShell 中执行，需要 GCC 在 `PATH` 中。
 
 ```powershell
-cd "D:\Users\Admin\Desktop\Y2S1\RBE104 course work\game"
 .\scripts\build_basic.bat
 .\build\windows\terminal.exe
 ```
@@ -41,20 +40,23 @@ cd "D:\Users\Admin\Desktop\Y2S1\RBE104 course work\game"
 | 获胜后进入下一关 | N |
 | 退出 | Q、Esc 或关闭窗口 |
 
-GUI 构建需要与 GCC 架构匹配的 MinGW SDL2 开发库。脚本读取 `SDL2_ROOT`，未设置时使用本机路径：
+GUI 构建需要与 GCC 架构匹配的 MinGW SDL2 开发库。已验证版本为 SDL2 2.32.10。将开发包中匹配架构目录的内容放入以下位置，并保留开发包的 `LICENSE.txt`：
 
 ```text
-D:\Coding\env\SDL2\SDL2-2.32.10\x86_64-w64-mingw32
+deps/SDL2/include/SDL2/SDL.h
+deps/SDL2/lib/
+deps/SDL2/bin/SDL2.dll
+deps/SDL2/LICENSE.txt
 ```
 
-换电脑后，设置为实际安装目录，例如：
+脚本默认使用仓库内的 `deps/SDL2/`。也可用 `SDL2_ROOT` 指定其他目录；相对路径以仓库根目录为基准，例如：
 
 ```powershell
-$env:SDL2_ROOT = 'C:\Libraries\SDL2\x86_64-w64-mingw32'
+$env:SDL2_ROOT = '.\deps\SDL2'
 .\scripts\build_basic.bat gui
 ```
 
-该目录应包含 `include/SDL2/SDL.h`、`lib/` 和 `bin/SDL2.dll`。脚本将 DLL 复制到 EXE 旁，并在上级目录存在 `LICENSE.txt` 时复制为 `SDL2-LICENSE.txt`。GUI 构建还需要 MinGW 的 `windres`，用于嵌入 `assets/parcel_shift.ico`。脚本将六个 WAV 复制到 EXE 旁的 `assets/`。分发窗口版时一起保留 `parcel_shift.exe`、`SDL2.dll`、`SDL2-LICENSE.txt` 和 `assets/`。窗口版不依赖 SDL_image、SDL_ttf 或外部字体、图片。
+`deps/` 不纳入 Git，接收方需自行安装 GCC 和 SDL2 开发库。脚本将 DLL 复制到 EXE 旁，并从 SDL2 目录或其上级目录复制 `LICENSE.txt` 为 `SDL2-LICENSE.txt`。GUI 构建还需要 MinGW 的 `windres`，用于嵌入 `assets/parcel_shift.ico`。脚本将六个 WAV 复制到 EXE 旁的 `assets/`。分发窗口版时一起保留 `parcel_shift.exe`、`SDL2.dll`、`SDL2-LICENSE.txt` 和 `assets/`。窗口版不依赖 SDL_image、SDL_ttf 或外部字体、图片。
 
 SDL 版自动循环背景音乐；有效移动、拾取、碰撞、配送和通关播放对应音效，最后一次配送只播放胜利旋律。暂停时背景音乐继续，当前音效清空；重开和按 N 也清空音效。音量通过 Windows 音量混合器调整。音频从 EXE 旁的 `assets/` 加载，设备或文件不可用时继续游戏。终端版不链接 SDL 或音频模块。
 
@@ -103,6 +105,7 @@ SDL 版自动循环背景音乐；有效移动、拾取、碰撞、配送和通�
 | `scripts/build_basic.bat` | Windows 构建入口 |
 | [维护与交接](docs/TEAM_HANDOFF.md) | 修改位置、同步要求和提交待办 |
 | [测试记录](docs/TEST_RESULTS.md) | 复现命令、结果与未验证项 |
+| [report 编程素材](docs/REPORT_MATERIALS_ZH.md) | 供组员筛选的实现说明、问题修复与测试案例 |
 
 不要把全部 `*.c` 一起编译：窗口、终端、预览和测试分别定义 `main()`。修改规则时只改 `game.c`；两端通过 `processCommand()` 提交游戏操作，通过 `getGameStatus()` 读取胜负状态。退出由各前端处理。
 
@@ -116,6 +119,6 @@ python tests/test_terminal.py
 
 ## 课程提交限制
 
-根目录的[作业 PDF](../RBE104TC_Group_Coursework_Warehouse_Delivery_Robot.pdf)要求 standard C、terminal-based 游戏。提交保留不依赖 SDL 的终端版；如需附交 SDL 窗口版，按教师要求处理。终端版需要编译 `src/level.c`、`src/solver.c`、`src/game.c`、`src/terminal.c`，并提供相应头文件；不能单独编译 `terminal.c`。显示层中的位运算、像素缓冲区和 SDL 事件需要成员自行理解。
+仓库内的[作业 PDF](docs/assignment.pdf)要求 standard C、terminal-based 游戏。提交保留不依赖 SDL 的终端版；如需附交 SDL 窗口版，按教师要求处理。终端版需要编译 `src/level.c`、`src/solver.c`、`src/game.c`、`src/terminal.c`，并提供相应头文件；不能单独编译 `terminal.c`。显示层中的位运算、像素缓冲区和 SDL 事件需要成员自行理解。
 
 报告最多 1500 词，需附源码、构建运行说明、至少三个可复现场景和真实贡献声明。PDF 中截止日期为待定，实际日期以课程通知为准。本原型使用了 AI 辅助，协助披露按课程政策填写。

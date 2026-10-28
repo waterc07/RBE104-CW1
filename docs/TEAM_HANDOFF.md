@@ -2,6 +2,15 @@
 
 运行方法见 [README](../README.md)，已执行的检查见[测试记录](TEST_RESULTS.md)。以下源码路径相对于 `game/`。
 
+## Git 仓库交接范围
+
+- 仓库包含源码、头文件、Windows 构建脚本、测试、六个 WAV、图标、预览图、维护文档、[report 素材](REPORT_MATERIALS_ZH.md)及[作业说明原件](assignment.pdf)。不依赖仓库上级目录的文件。
+- 接收方需要 GCC；终端集成测试另需 Python 3。SDL 窗口构建和音频、窗口测试另需匹配 GCC 架构的 MinGW SDL2 开发库及 `windres`，目录配置见 README。
+- `build/` 和 `deps/` 不纳入 Git。仓库交接的是源码，接收方需构建后运行；现有 EXE、DLL、生成预览和测试日志不随仓库交付，测试命令与结果保留在 TEST_RESULTS。
+- `assets/parcel_shift.png` 是图标源图，`game.code-workspace` 是可选编辑器入口；二者不参与游戏规则，可保留供维护。测试和音频生成脚本用于复现与修改，不建议从同伴交接仓库中删除。
+- 最终报告、组员贡献声明、课程评分表和最新课程通知需组内另行准备。仓库内的素材不是最终报告；作业 PDF 不代替后续通知。
+- 新增文件纳入 Git 并提交后再导出。`git archive HEAD` 只包含已提交内容，不包含暂存或工作区修改；直接复制整个目录会混入忽略的构建输出。
+
 ## 修改位置
 
 | 内容 | 文件 / 符号 |
